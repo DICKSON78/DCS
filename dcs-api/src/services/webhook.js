@@ -1,6 +1,16 @@
+import https from 'node:https';
 import { prisma } from '../lib/prisma.js';
 import { hmacSHA256, sha256 } from '../utils/crypto.js';
 import { config } from '../config/index.js';
+
+const webhookAgent =
+  config.tls.outboundKey && config.tls.outboundCert
+    ? new https.Agent({
+        key: config.tls.outboundKey,
+        cert: config.tls.outboundCert,
+        ca: config.tls.outboundCa,
+      })
+    : undefined;
 
 export async function subscribeWebhook({ tenantId, callbackUrl }) {
   const secret = sha256(tenantId + ':' + callbackUrl);
@@ -66,6 +76,7 @@ export async function deliverWebhookEvent(eventId) {
       },
       body: payload,
       signal: controller.signal,
+      agent: webhookAgent,
     });
 
     const acknowledged = res.ok;

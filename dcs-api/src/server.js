@@ -22,9 +22,20 @@ import { loadTenantRegistry } from './services/tenant-registry.js';
 import { recordLatency, getMetrics } from './utils/metrics.js';
 
 export async function buildServer() {
+  const httpsOptions = config.tls.enabled
+    ? {
+        key: config.tls.key,
+        cert: config.tls.cert,
+        ca: config.tls.ca,
+        requestCert: config.tls.requestClientCert,
+        rejectUnauthorized: config.tls.rejectUnauthorized,
+      }
+    : undefined;
+
   const fastify = Fastify({
     logger: { level: config.logLevel },
     trustProxy: true,
+    https: httpsOptions,
   });
 
   await fastify.register(swagger, {
