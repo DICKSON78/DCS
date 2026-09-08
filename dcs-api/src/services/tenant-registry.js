@@ -53,3 +53,26 @@ export async function resolveTenant(apiKeyHash) {
     return null;
   }
 }
+
+export async function refreshTenantFromDb(tenantId) {
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { tenant_id: tenantId } });
+    if (!tenant) return null;
+    const snapshot = {
+      tenant_id: tenant.tenant_id,
+      name: tenant.name,
+      tenant_type: tenant.tenant_type,
+      api_key_hash: tenant.api_key_hash,
+      signing_key_hash: tenant.signing_key_hash,
+      status: tenant.status,
+      fail_policy: tenant.fail_policy,
+    };
+    for (const [key, value] of cache) {
+      if (value.tenant_id === tenantId) cache.delete(key);
+    }
+    cache.set(snapshot.api_key_hash, snapshot);
+    return snapshot;
+  } catch {
+    return null;
+  }
+}

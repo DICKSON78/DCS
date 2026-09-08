@@ -227,3 +227,111 @@ test('health reports real validate latency metrics', async () => {
   assert.ok('validate_samples' in body.sla);
   assert.ok(typeof body.audit_chain.status === 'string');
 });
+
+test('ops rotation rotates API key and signing secret (old credentials rejected)', async () => {
+  const ops = { authorization: `Bearer ${process.env.OPS_BEARER_TOKEN}` };
+  const rotTenant = 'tenant-rot-' + Date.now();
+  const oldKey = 'rot-old-key-' + Date.now();
+  const oldSecret = 'rot-old-secret-' + Date.now();
+
+  await prisma.tenant.create({
+    data: {
+      tenant_id: rotTenant,
+      name: 'Rotation Tenant',
+      tenant_type: 'mno',
+      api_key_hash: sha256(oldKey),
+      signing_key_hash: oldSecret,
+      status: 'active',
+      fail_policy: 'fail_open',
+    },
+  });
+
+  try {
+    const valPayload = {
+      tenant_txn_ref: 'ROT-1',
+      user_external_ref: '2557000999',
+      amount: 5000,
+      currency: 'TZS',
+      channel: 'mobile_money',
+      recipient_external_ref: '255712345678',
+      occurred_at: '2026-09-08T11:00:00Z',
+    };
+
+    const signWith = (secret) => ({ method, url, payload }) => {
+      const timestamp = String(Date.now());
+      const nonce = crypto.randomUUID();
+      const body = payload ? JSON.stringify(payload) : '';
+      const path = url.split('?')[0];
+      const query = url.split('?')[1] || '';
+      const signature = hmacSHA256(secret, [timestamp, method, path, query, body].join('.'));
+      return { ...{ 'x-tenant-key': oldKey }, 'x-timestamp': timestamp, 'x-nonce': nonce, 'x-signature': signature };
+    };
+
+    let res = await app.inject({
+      method: 'POST',
+      url: `/v1/ops/tenants/${rotTenant}/rotate-api-key`,
+      headers: ops,
+    });
+    assert.equal(res.statusCode, 200, JSON.stringify(res.json()));
+    const { api_key } = res.json();
+    assert.ok(api_key && api_key.length >= 30);
+
+    res = await app.inject({
+      method: 'POST',
+      url: '/v1/transactions/validate',
+      headers: { ...signWith(oldSecret)({ method: 'POST', url: '/v1/transactions/validate', payload: valPayload }), 'content-type': 'application/json' },
+      payload: valPayload,
+    });
+    assert.equal(res.statusCode, 401, 'old api key must be rejected after rotation');
+
+    res = await app.inject({
+      method: 'POST',
+      url: `/v1/ops/tenants/${rotTenant}/rotate-signing-key`,
+      headers: ops,
+    });
+    assert.equal(res.statusCode, 200, JSON.stringify(res.json()));
+    const { signing_secret } = res.json();
+    assert.ok(signing_secret && signing_secret.length >= 30);
+
+    const ts = String(Date.now());
+    const nonce = crypto.randomUUID();
+    const body = JSON.stringify(valPayload);
+    const sig = hmacSHA256(signing_secret, [ts, 'POST', '/v1/transactions/validate', '', body].join('.'));
+    res = await app.inject({
+      method: 'POST',
+      url: '/v1/transactions/validate',
+      headers: {
+        'x-tenant-key': api_key,
+        'x-timestamp': ts,
+        'x-nonce': nonce,
+        'x-signature': sig,
+        'content-type': 'application/json',
+      },
+      payload: valPayload,
+    });
+    assert.equal(res.statusCode, 200, 'new api key + new signing secret must succeed');
+    assert.ok(typeof res.json().decision === 'string', 'must return a decision');
+
+    const oldSig = hmacSHA256(oldSecret, [ts, 'POST', '/v1/transactions/validate', '', body].join('.'));
+    res = await app.inject({
+      method: 'POST',
+      url: '/v1/transactions/validate',
+      headers: {
+        'x-tenant-key': api_key,
+        'x-timestamp': ts,
+        'x-nonce': crypto.randomUUID(),
+        'x-signature': oldSig,
+        'content-type': 'application/json',
+      },
+      payload: valPayload,
+    });
+    assert.equal(res.statusCode, 401, 'old signing secret must be rejected after rotation');
+  } finally {
+    await prisma.auditLog.deleteMany({ where: { tenant_id: rotTenant } });
+    await prisma.reasonCode.deleteMany({ where: { transaction: { tenant_id: rotTenant } } });
+    await prisma.transaction.deleteMany({ where: { tenant_id: rotTenant } });
+    await prisma.customerBaseline.deleteMany({ where: { tenant_id: rotTenant } });
+    await prisma.recipientVerification.deleteMany({ where: { tenant_id: rotTenant } });
+    await prisma.tenant.deleteMany({ where: { tenant_id: rotTenant } });
+  }
+});
