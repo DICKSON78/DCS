@@ -25,3 +25,6 @@ tmp/
 *.swp
 .idea/
 .vscode/
+
+# Internal documents (not public)
+*.docx
