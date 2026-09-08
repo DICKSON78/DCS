@@ -1,0 +1,183 @@
+﻿
+
+
+
+
+
+
+
+
+
+
+API Reference Documentation
+Real time digital recipient verification, fraud detection and transaction hold | freeze
+| block API for banks and mobile network operators
+
+
+Document version: v1.0 Date: 8 Aug 2026
+
+Abbreviations
+
+Abbreviation
+Full term
+AI
+Artificial Intelligence
+API
+Application Programming Interface
+BOT
+Bank of Tanzania
+DCS
+Digital Consumer Shield
+FIU
+Financial Intelligence Unit
+HMAC
+Hash-based Message Authentication Code
+HTTP / HTTPS
+Hypertext Transfer Protocol (Secure)
+JSON
+JavaScript Object Notation
+ML
+Machine Learning
+MNO
+Mobile Network Operator
+mTLS
+Mutual Transport Layer Security
+PSP
+Payment Service Provider
+RLS
+Row-Level Security
+SLA
+Service Level Agreement
+TCRA
+Tanzania Communications Regulatory Authority
+TLS
+Transport Layer Security
+TTL
+Time To Live
+TZS
+Tanzanian Shilling
+Base URL: https://api.dcs.co.tz/v1 · JSON over HTTPS · one API key per tenant (bank/MNO)
+
+    1. Authentication
+Every request requires mutual TLS plus a per-tenant API key in the X-Tenant-Key header. State-changing requests (transaction validation, dispute actions) also require a client-generated X-Request-Id for idempotency — retried requests with the same id return the original result instead of double-processing.
+
+    2. Recipient verification
+Most money lost by ordinary customers isn't sophisticated fraud — it's sending to the wrong number by mistake. Before a transfer is submitted, the bank/MNO app calls this endpoint with the recipient's account/phone number and shows the customer the real registered name to confirm (the same pattern mobile money apps already use for "confirm recipient"). This runs before the transaction validation below, and catches wrong-number mistakes at the point the customer can still cancel — which is most of what "fraud detection" means to an everyday user.
+POST /v1/recipients/verify
+    3. Endpoint index
+
+Method
+Path
+Purpose
+Called by
+POST
+/v1/recipients/verify
+Look up and confirm the recipient's registered name before sending
+Bank / MNO
+POST
+/v1/transactions/validate
+Real-time fraud detection & validation (core endpoint) — the only synchronous, latency-critical call
+Bank / MNO
+GET
+/v1/transactions/{id}
+Retrieve a previously scored transaction
+Bank / MNO
+POST
+/v1/holds/{id}/release
+Release a held transaction (manual or automated)
+Bank / MNO, DCS ops
+POST
+/v1/holds/{id}/freeze
+Escalate a hold to a freeze pending investigation
+DCS ops
+POST
+/v1/disputes
+File a dispute against a hold
+Bank / MNO, customer via bank
+PATCH
+/v1/disputes/{id}
+Record a dispute outcome
+DCS ops analyst
+POST
+/v1/webhooks/subscribe
+Register a callback URL for async events
+Bank / MNO (once, at onboarding)
+GET
+/v1/health
+Service health & current SLA status
+Bank / MNO monitoring, DCS ops
+
+    4. POST /v1/transactions/validate
+The core endpoint. Called synchronously at authorization time, before funds move. Budget: p95 < 150ms, p99 < 300ms; breach triggers the tenant's configured fail-open/fail-closed policy.
+
+Behavioural anomaly advisory
+The AI agent keeps a rolling behavioural baseline per customer (typical amount, typical recipients, typical time of day). When a transaction is far outside that customer's own normal pattern — e.g. someone who usually sends under TZS 100,000 suddenly sends TZS 250,000 — the risk isn't necessarily high enough to hold or freeze the funds, but the customer should still get a chance to double-check what they're doing. In that case the decision is warn: the transaction is allowed to proceed, but the response carries an advisory object with a plain-language message the bank/MNO app shows the customer before they confirm — a soft "are you sure?" prompt rather than a block.
+Decision states
+decision
+Meaning
+Funds effect
+allow
+No meaningful risk signal
+Transaction proceeds immediately
+warn
+Unusual for this specific customer's own pattern, not independently risky
+Proceeds after the customer confirms the advisory message — no hold placed
+hold
+Suspicious — needs a time-boxed second validation
+Funds paused for ttl_seconds, then auto-release unless escalated
+freeze
+Confirmed high-risk pattern, needs investigation
+Funds locked indefinitely until a DCS ops analyst resolves it (POST /v1/holds/{id}/freeze)
+block
+Hard rule/deny-list match
+Transaction rejected outright, never reaches the ledger
+
+Figure 1. Real-time transaction validation flow
+The bank/MNO's own system enforces the returned decision on its own ledger — DCS never touches funds directly.
+    5. Dispute & hold-release endpoints
+
+Endpoint
+Request body
+Response
+POST /v1/disputes
+hold_id, reason, evidence_url
+dispute_id, status: "open", sla_due_at
+PATCH /v1/disputes/{id}
+outcome: "approved"|"rejected", note
+dispute_id, outcome, resolved_at
+POST /v1/holds/{id}/release
+released_by, note
+hold_id, status: "released", released_at
+
+Figure 2. Dispute resolution flow
+Dispute resolution is asynchronous — DCS notifies the bank/MNO via webhook rather than the bank/MNO polling.
+    6. Webhooks
+Registered once via POST /v1/webhooks/subscribe. DCS retries failed deliveries with exponential backoff for 24h.
+
+    7. Error codes
+
+HTTP status
+Code
+Meaning
+400
+invalid_payload
+Missing or malformed field — request rejected before scoring
+401
+invalid_key
+X-Tenant-Key missing, revoked, or wrong tenant
+409
+duplicate_request
+X-Request-Id already processed — original result returned
+422
+unscoreable
+Payload valid but required feature data unavailable
+429
+rate_limited
+Per-tenant request quota exceeded
+503
+degraded
+SLA breach — response follows the tenant's fail-open/fail-closed policy
+    8. Rate limits & SLA
+        ◦ Default: 200 requests/second per tenant, burstable to 400 for 10s
+        ◦ p95 < 150ms, p99 < 300ms on /v1/transactions/validate; breach triggers configured fail-open/fail-closed behaviour
+        ◦ Sandbox environment mirrors production limits at 10% quota for pre-production conformance testing

@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dcs-postgres
+    environment:
+      POSTGRES_USER: dcs
+      POSTGRES_PASSWORD: dcs_password
+      POSTGRES_DB: dcs
+    ports:
+      - "5432:5432"
+    volumes:
+      - dcs-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dcs -d dcs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  dcs-postgres-data:

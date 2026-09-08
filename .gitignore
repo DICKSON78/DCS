@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets (DO NOT COMMIT)
+.env
+.env.*
+!.env.example
+
+# Databases & scratch data
+dev.db
+*.db
+*.sqlite
+*.sqlite3
+
+# Prisma generated client (regenerated with `prisma generate`)
+src/generated/
+
+# Logs
+*.log
+logs/
+tmp/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

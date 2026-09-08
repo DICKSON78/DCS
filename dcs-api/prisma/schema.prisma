@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  tenant_id    String            @id @default(uuid())
+  name         String
+  tenant_type  String
+  api_key_hash String            @unique
+  signing_key_hash String?
+  status       String            @default("active")
+  fail_policy  String            @default("fail_open")
+  created_at   DateTime          @default(now())
+
+  verifications        RecipientVerification[]
+  transactions         Transaction[]
+  webhookSubscriptions WebhookSubscription[]
+  customerBaselines    CustomerBaseline[]
+  auditLogs            AuditLog[]
+}
+
+model RecipientVerification {
+  verification_id        String   @id @default(uuid())
+  tenant_id              String
+  recipient_external_ref String
+  channel                String
+  tenant_txn_ref         String
+  verified               Boolean
+  recipient_display_name String?
+  account_age_days       Int?
+  first_time_recipient   Boolean?
+  created_at             DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [tenant_id])
+
+  @@index([tenant_id])
+}
+
+model Transaction {
+  transaction_id        String   @id @default(uuid())
+  tenant_id             String
+  tenant_txn_ref        String
+  user_external_ref     String
+  amount                Decimal  @db.Decimal(18, 2)
+  currency              String
+  channel               String
+  recipient_external_ref String
+  device_fingerprint    String?
+  occurred_at           DateTime
+  decision              String
+  risk_score            Float?
+  model_version         String?
+  created_at            DateTime @default(now())
+
+  tenant      Tenant      @relation(fields: [tenant_id], references: [tenant_id])
+  reasonCodes ReasonCode[]
+  hold        Hold?
+
+  @@unique([tenant_id, tenant_txn_ref])
+  @@index([tenant_id])
+}
+
+model ReasonCode {
+  reason_code_id String   @id @default(uuid())
+  transaction_id String
+  code           String
+
+  transaction Transaction @relation(fields: [transaction_id], references: [transaction_id])
+
+  @@index([transaction_id])
+}
+
+model Hold {
+  hold_id       String   @id @default(uuid())
+  transaction_id String  @unique
+  ttl_seconds   Int
+  status        String   @default("active")
+  released_by   String?
+  released_at   DateTime?
+  created_at    DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transaction_id], references: [transaction_id])
+  disputes    Dispute[]
+
+  @@index([status])
+}
+
+model Dispute {
+  dispute_id   String   @id @default(uuid())
+  hold_id      String
+  reason       String
+  evidence_url String?
+  status       String   @default("open")
+  sla_due_at   DateTime
+  outcome      String?
+  analyst_id   String?
+  resolved_at  DateTime?
+  created_at   DateTime @default(now())
+
+  hold    Hold     @relation(fields: [hold_id], references: [hold_id])
+  analyst OpsUser? @relation(fields: [analyst_id], references: [analyst_id])
+
+  @@index([hold_id])
+}
+
+model OpsUser {
+  analyst_id    String   @id @default(uuid())
+  name          String
+  role          String   @default("analyst")
+  email         String   @unique
+  password_hash String?
+  created_at    DateTime @default(now())
+
+  disputes Dispute[]
+}
+
+model WebhookSubscription {
+  webhook_id   String   @id @default(uuid())
+  tenant_id    String   @unique
+  callback_url String
+  secret_hash  String
+  created_at   DateTime @default(now())
+
+  tenant Tenant          @relation(fields: [tenant_id], references: [tenant_id])
+  events WebhookEvent[]
+
+  @@index([tenant_id])
+}
+
+model WebhookEvent {
+  event_id   String   @id @default(uuid())
+  webhook_id String
+  event_type String
+  payload    Json
+  delivered  Boolean  @default(false)
+  attempts   Int      @default(0)
+  created_at DateTime @default(now())
+
+  webhook WebhookSubscription @relation(fields: [webhook_id], references: [webhook_id])
+
+  @@index([webhook_id])
+}
+
+model CustomerBaseline {
+  baseline_id         String   @id @default(uuid())
+  tenant_id           String
+  user_external_ref   String
+  typical_amount      Decimal? @db.Decimal(18, 2)
+  typical_recipients  Json?
+  typical_time_of_day String?
+  known_devices       Json?
+  tx_count_last_hour  Int      @default(0)
+  hour_window_start   DateTime?
+  distinct_recipients_day Int @default(0)
+  day_window_start    DateTime?
+  first_seen_at       DateTime @default(now())
+  updated_at          DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [tenant_id])
+
+  @@unique([tenant_id, user_external_ref])
+}
+
+model AuditLog {
+  audit_id    String   @id @default(uuid())
+  tenant_id   String
+  entity_type String
+  entity_id   String
+  action      String
+  actor       String
+  prev_hash   String?
+  entry_hash  String?
+  timestamp   DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [tenant_id])
+
+  @@index([tenant_id])
+  @@index([tenant_id, timestamp])
+}
+
+model IdempotencyRecord {
+  id         String   @id @default(uuid())
+  request_id String
+  tenant_id  String
+  endpoint   String
+  status     String   @default("completed")
+  response   Json?
+  created_at DateTime @default(now())
+  expires_at DateTime
+
+  @@unique([request_id, tenant_id])
+}
+
+model RequestNonce {
+  id         String   @id @default(uuid())
+  nonce      String
+  tenant_id  String
+  created_at DateTime @default(now())
+  expires_at DateTime
+
+  @@unique([nonce, tenant_id])
+  @@index([expires_at])
+}

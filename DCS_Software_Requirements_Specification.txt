@@ -1,0 +1,1066 @@
+﻿
+
+
+
+
+
+Software Requirements Specification
+(SRS)
+Real-time recipient verification, fraud detection, and transaction hold / freeze
+/ block platform for Banks, MNOs, GePG and TIPS payment channels
+
+
+
+Document version: 2.2
+Date: 8 September 2026
+Standards: IEEE 830-1998 SRS structure · UML 2.5 use case & sequence notation
+Source reference: DCS API Reference Documentation v1.0 (8 Aug 2026)
+
+
+
+
+
+
+
+
+
+Table of Contents
+1. Introduction	3
+2. Overall Description	5
+3. External Interface Requirements	9
+4. Use Case Model	10
+5. Sequence Diagrams	18
+6. Functional Requirements	22
+7. Database Design	25
+8. Non-Functional Requirements	29
+9. Data Requirements	30
+10. Requirements Traceability Matrix	31
+11. Assumptions, Dependencies & Risks	32
+12. Appendix	32
+
+1. Introduction
+1.1 Purpose
+This Software Requirements Specification (SRS) defines the functional and non-functional requirements, use case model, interaction (sequence) behaviour, and database design for the Digital Consumer Shield (DCS) platform. DCS is a real-time API service that Banks, Mobile Network Operators (MNOs), the Government Electronic Payment Gateway (GePG), and the Tanzania Instant Payment System (TIPS) call at the point of transaction to verify recipients and score transactions for fraud risk before funds move. This document is derived from the DCS API Reference Documentation (v1.0, 8 Aug 2026) and expands it into a structured specification suitable for design, development, testing, integration, and investor/technical review.
+1.2 Scope
+DCS operates as a B2B, API-first service. It does not sit inline on telecom infrastructure and does not hold customer funds directly; it is called synchronously by a tenant's (bank/MNO/GePG/TIPS) core system, returns a decision, and the tenant's own ledger enforces that decision. The scope of this document covers:
+    • Recipient verification prior to transaction entry.
+    • Real-time transaction risk scoring and decisioning (allow / warn / hold / freeze / block).
+    • Retrieval of previously scored transactions.
+    • Hold release and freeze escalation workflows.
+    • Dispute filing and resolution workflows.
+    • Webhook-based asynchronous event notification.
+    • Authentication, tenancy, idempotency, rate limiting, and service-health monitoring.
+    • The use case model describing all actor interactions with the system.
+    • Sequence diagrams describing the runtime message flow for the three core workflows.
+    • The database design (entity-relationship model) supporting the above.
+Out of scope: the internal design of the tenant's mobile banking/USSD/POS applications, the core banking or MNO switch, and any UI the tenant chooses to build around the advisory/warn messages.
+1.3 Intended Audience
+    • DCS engineering team (backend, ML/AI, DevOps, database).
+    • Integrating tenants' technical teams (banks, MNOs, GePG, TIPS).
+    • DCS operations analysts (dispute and freeze handling).
+    • QA/test engineers, technical reviewers, and investors.
+
+
+1.4 Definitions, Acronyms and Abbreviations
+Abbreviation
+Full Term
+AI
+Artificial Intelligence
+API
+Application Programming Interface
+BOT
+Bank of Tanzania
+DCS
+Digital Consumer Shield
+ERD
+Entity-Relationship Diagram
+FIU
+Financial Intelligence Unit
+GePG
+Government Electronic Payment Gateway
+HMAC
+Hash-based Message Authentication Code
+HTTP/HTTPS
+Hypertext Transfer Protocol (Secure)
+JSON
+JavaScript Object Notation
+ML
+Machine Learning
+MNO
+Mobile Network Operator
+mTLS
+Mutual Transport Layer Security
+PK / FK
+Primary Key / Foreign Key
+PSP
+Payment Service Provider
+SLA
+Service Level Agreement
+SRS
+Software Requirements Specification
+TCRA
+Tanzania Communications Regulatory Authority
+TIPS
+Tanzania Instant Payment System
+TLS
+Transport Layer Security
+TTL
+Time To Live
+TZS
+Tanzanian Shilling
+UML
+Unified Modeling Language
+1.5 References
+    • DCS API Reference Documentation, v1.0, 8 Aug 2026.
+    • DCS System Architecture (5-layer model: customer channel, security and compliance, DCS engine, financial institutions, regulators).
+    • IEEE Recommended Practice for Software Requirements Specifications (IEEE Std 830-1998) — structural reference for this document.
+    • Object Management Group, Unified Modeling Language (UML) 2.5 Specification — notation reference for the use case and sequence diagrams.
+
+1.6 Document Conventions
+    • Each functional requirement is uniquely identified as REQ-<AREA>-<NN> (e.g. REQ-TXVAL-01) for traceability.
+    • Each use case is uniquely identified as UC-<NN>.
+    • Endpoint paths and JSON field names are shown in plain text, e.g. POST /v1/transactions/validate.
+    • The keywords “shall”, “should”, and “may” follow standard SRS convention: “shall” denotes a mandatory requirement, “should” a recommended one, and “may” an optional one.
+1.7 Document Structure
+Section 2 gives the overall product description and system architecture. Section 3 defines external interfaces. Section 4 presents the use case model. Section 5 presents sequence diagrams for the three core workflows. Section 6 lists functional requirements. Section 7 presents the database design. Section 8 lists non-functional requirements. Section 9 defines data requirements. Section 10 provides a requirements traceability matrix. Section 11 lists assumptions, dependencies, and risks. Section 12 is the appendix.
+2. Overall Description
+2.1 Product Perspective
+DCS is a standalone, multi-tenant risk-decisioning service exposed at a single base URL (https://api.dcs.co.tz/v1) over JSON/HTTPS. Each tenant (a bank, MNO, GePG or TIPS participant) is provisioned with one API key and authenticates every call with mutual TLS plus that key. DCS is called synchronously in the authorization path of a transaction and returns a decision; the tenant's own system is solely responsible for enforcing that decision on its ledger. DCS never touches funds directly.
+2.2 System Architecture
+DCS is organised into five architectural layers, from the customer-facing channel down to the national regulatory layer. A dedicated Security and Compliance layer cross-cuts the stack, enforcing API-key authentication, encryption at rest, audit logging, and tenant-level row-level security (RLS) around every request. The full diagram is shown in Figure 1 on the following page.
+    • Layer 1 — Customer Channel Layer: the channels through which a customer initiates a transaction (bank application, mobile money, USSD/POS/QR).
+    • Layer 2 — Security and Compliance Layer (cross-cutting): API-key authentication, encryption at rest, audit logging, and tenant row-level security (RLS), applied across every layer's request and data path.
+    • Layer 3 — DCS Engine Layer: the API Gateway routes each request to the Core API Service and the Fraud Scoring AI Agent, both of which read from and write to the shared Data Stores.
+    • Layer 4 — Financial Institution Layer: the tenants that integrate with DCS — banks, MNOs, fintechs, and payment service providers (PSPs).
+    • Layer 5 — Regulators Layer: downstream regulatory and compliance stakeholders — TCRA, the Bank of Tanzania (BOT), and the Financial Intelligence Unit (FIU).
+DCS does not hold, take custody of, or have access to any client's funds at any point; every decision is enforced by the tenant's own ledger in Layer 4.
+DCS Five-Layer System Architecture
+
+Figure 1
+
+2.3 Product Functions (Summary)
+Function
+Description
+Primary Caller
+Recipient verification
+Confirms the registered account/wallet name for an entered recipient identifier before transaction details are entered.
+Bank / MNO / GePG / TIPS
+Transaction validation
+Synchronous, latency-critical fraud/risk scoring of a transaction before funds move.
+Bank / MNO / GePG / TIPS
+Transaction retrieval
+Fetches a previously scored transaction's decision and metadata.
+Bank / MNO / GePG / TIPS
+Hold release
+Releases a time-boxed hold, manually or automatically.
+Bank/MNO/GePG/TIPS, DCS ops
+Freeze escalation
+Escalates a hold to an indefinite freeze pending investigation.
+DCS ops
+Dispute filing & resolution
+Records a customer/bank dispute against a hold and its outcome.
+Bank/MNO/GePG/TIPS, DCS ops analyst
+Webhook subscription
+Registers a callback URL for asynchronous events such as dispute resolution.
+Bank / MNO / GePG / TIPS (onboarding)
+Health monitoring
+Reports service health and current SLA status.
+Tenant monitoring, DCS ops
+2.4 User Classes and Characteristics
+    • Tenant systems (banks, MNOs, GePG, TIPS) — machine clients calling the API in real time; require high availability and predictable latency.
+    • Tenant end customers — indirect users who see recipient names and advisory/warn messages surfaced by the tenant's own app; do not interact with DCS directly.
+    • DCS operations analysts — human users who review holds, approve/reject disputes, and escalate freezes via an internal ops dashboard.
+    • Tenant monitoring systems — automated systems polling DCS health/SLA status.
+2.5 Operating Environment
+    • Cloud-hosted, multi-tenant backend exposed over HTTPS with mutual TLS.
+    • Consumed by tenant core banking systems, MNO platforms, GePG, and TIPS switches — not embedded on customer devices.
+    • Sandbox environment mirrors production for pre-production conformance testing.
+2.6 Design and Implementation Constraints
+    • DCS must never process or hold customer funds — all fund movement decisions are enforced by the tenant's own ledger.
+    • The validation endpoint is synchronous and latency-critical; the design must meet the stated p95/p99 budgets under load.
+    • Each tenant is isolated by a single per-tenant API key and tenant-scoped data access.
+    • Recipient identifiers and user identifiers are passed as hashed references (e.g. hashed MSISDN/account), not raw PII, in transaction payloads.
+2.7 Assumptions and Dependencies
+    • Tenants' core banking/MNO/GePG/TIPS systems can call DCS synchronously within their authorization flow without breaching their own transaction time budgets.
+    • Tenants implement a fail-open or fail-closed policy to apply when DCS is degraded or unreachable.
+    • Tenants can render the advisory message and hold/freeze states appropriately in their own customer-facing apps.
+3. External Interface Requirements
+3.1 API Interface
+All endpoints are exposed under the base URL https://api.dcs.co.tz/v1 as JSON over HTTPS.
+Method
+Path
+Purpose
+Called by
+POST
+/v1/recipients/verify
+Confirm recipient's registered name at initial input and during the transaction process.
+Bank/MNO/GePG/TIPS
+POST
+/v1/transactions/validate
+Real-time fraud detection & validation (core endpoint).
+Bank/MNO/GePG/TIPS
+GET
+/v1/transactions/{id}
+Retrieve a previously scored transaction.
+Bank/MNO/GePG/TIPS
+POST
+/v1/holds/{id}/release
+Release a held transaction (manual or automated).
+Bank/MNO/GePG/TIPS, DCS ops
+POST
+/v1/holds/{id}/freeze
+Escalate a hold to a freeze pending investigation.
+DCS ops
+POST
+/v1/disputes
+File a dispute against a hold.
+Bank/MNO/GePG/TIPS, customer via bank
+PATCH
+/v1/disputes/{id}
+Record a dispute outcome.
+DCS ops analyst
+POST
+/v1/webhooks/subscribe
+Register a callback URL for async events (onboarding, once).
+Bank/MNO/GePG/TIPS
+GET
+/v1/health
+Service health & current SLA status.
+Tenant monitoring, DCS ops
+
+3.2 Communication Interfaces
+    • HTTPS with mutual TLS (mTLS) for every request.
+    • Per-tenant API key supplied in the X-Tenant-Key header.
+    • Client-generated X-Request-Id header for idempotent, state-changing requests.
+    • Outbound webhook deliveries signed with an HMAC-SHA256 signature in the X-DCS-Signature header.
+3.3 Hardware Interfaces
+DCS has no direct hardware interface requirement; it runs on standard cloud compute and is reached over the public internet or a private peering link agreed with each tenant. POS and QR-payment channels reach DCS indirectly, through the tenant's own acquiring infrastructure.
+3.4 Software Interfaces
+    • Core banking systems (for bank tenants) — queried indirectly during recipient verification and used as the system of record the tenant reconciles against.
+    • MNO mobile-money platforms — equivalent role for MNO tenants.
+    • GePG and TIPS switches — equivalent role for government and instant-payment rails.
+    • Tenant webhook receivers — HTTPS endpoints registered by each tenant to receive asynchronous DCS events.
+4. Use Case Model
+4.1 Actors
+Actor
+Description
+Bank / MNO / GePG / TIPS System
+The tenant's core system; the primary machine actor that calls DCS synchronously during recipient entry and transaction authorization.
+Customer
+The tenant's end customer; an indirect actor who sees recipient names and advisory prompts surfaced by the tenant's own application.
+DCS Ops Analyst
+Internal DCS staff who review holds, resolve disputes, and escalate freezes via the operations dashboard.
+Tenant Monitoring System
+Automated monitoring on the tenant side that polls DCS health/SLA status.
+
+The use case diagram is shown in Figure 2 on the following page; detailed specifications for each use case follow in Section 4.3.
+UML Use Case Diagram
+
+Figure 2  —  Actors and their associations with each DCS use case
+4.3 Use Case Specifications
+UC-01 — Verify Recipient
+Use Case ID
+UC-01
+Name
+Verify Recipient
+Actor(s)
+Bank / MNO / GePG / TIPS System (primary); Customer (indirect, via the tenant app)
+Description
+The tenant system requests confirmation of a recipient's registered name immediately after the customer enters a recipient account number or MSISDN, before any amount is captured.
+Preconditions
+The tenant is authenticated (valid X-Tenant-Key, mTLS). The customer has entered a recipient identifier in the tenant's app.
+Main Flow
+    1. Customer enters the recipient's account number or mobile number in the tenant app.
+    2. Tenant system sends POST /v1/recipients/verify with recipient_external_ref, channel, and tenant_txn_ref.
+    3. DCS looks up the registered name from the relevant core banking/MNO/GePG/TIPS system.
+    4. DCS returns verified, a partially masked recipient_display_name, account_age_days, and first_time_recipient.
+    5. Tenant app displays the masked name to the customer for confirmation before amount entry.
+Alternate / Exception Flow
+    • If the recipient cannot be found, DCS returns verified: false and the tenant app prompts the customer to re-enter the recipient identifier.
+    • If the request payload is invalid, DCS returns HTTP 400 (invalid_payload) and the tenant app surfaces a generic entry error.
+Postconditions: The customer has seen the registered recipient name (or a not-verified indicator) and can proceed to, or abandon, the transaction with that information.
+UC-02 — Validate Transaction
+Use Case ID
+UC-02
+Name
+Validate Transaction
+Actor(s)
+Bank / MNO / GePG / TIPS System (primary); Customer (indirect)
+Description
+The core, synchronous use case: the tenant system submits full transaction details for real-time fraud/risk scoring immediately before funds move.
+Preconditions
+The tenant is authenticated. A recipient has typically already been verified (UC-01). The customer has entered amount and confirmed intent to send.
+Main Flow
+    6. Tenant system sends POST /v1/transactions/validate with tenant_txn_ref, user_external_ref, amount, currency, channel, recipient_external_ref, device_fingerprint, and occurred_at, including X-Request-Id.
+    7. DCS gateway authenticates the request and validates the payload.
+    8. The rule engine and AI model score the transaction against the customer's rolling behavioural baseline.
+    9. DCS returns a decision (allow / warn / hold / freeze / block), risk_score, reason_codes, and model_version.
+    10. Tenant system enforces the decision on its own ledger and, for warn, shows the advisory message to the customer (UC includes “Receive Advisory / Confirm Transaction”).
+Alternate / Exception Flow
+    • If decision = hold, funds are paused for ttl_seconds and auto-released unless escalated (UC-05).
+    • If decision = freeze or block, the tenant blocks the transaction and, for freeze, a DCS ops analyst is notified for investigation.
+    • If DCS is unreachable or breaches its SLA, the tenant applies its configured fail-open/fail-closed policy.
+    • If X-Request-Id has already been processed, DCS returns the original result (HTTP 409, duplicate_request) instead of re-scoring.
+Postconditions: The transaction has an associated decision, risk score, and reason codes recorded and retrievable via UC-03.
+UC-03 — Retrieve Transaction Record
+Use Case ID
+UC-03
+Name
+Retrieve Transaction Record
+Actor(s)
+Bank / MNO / GePG / TIPS System
+Description
+The tenant system retrieves the previously recorded decision and scoring metadata for a transaction it submitted earlier.
+Preconditions
+The transaction was previously submitted via UC-02 and belongs to the requesting tenant.
+Main Flow
+    11. Tenant system sends GET /v1/transactions/{id}.
+    12. DCS verifies the transaction belongs to the requesting tenant.
+    13. DCS returns the stored decision, risk_score, reason_codes, and model_version.
+Alternate / Exception Flow
+    • If the transaction ID does not exist or belongs to another tenant, DCS returns an appropriate not-found/authorization error.
+Postconditions: The tenant has the full scoring record for reconciliation, customer support, or audit purposes.
+
+
+
+
+UC-04 — Release Hold
+Use Case ID
+UC-04
+Name
+Release Hold
+Actor(s)
+Bank / MNO / GePG / TIPS System; DCS Ops Analyst
+Description
+A previously held transaction's funds are released, either automatically on TTL expiry or manually following review or an approved dispute.
+Preconditions
+A hold exists (created as part of UC-02) and has not already been released or escalated to a freeze.
+Main Flow
+    14. Actor (tenant system or DCS ops) sends POST /v1/holds/{id}/release with released_by and note.
+    15. DCS validates the hold is still active.
+    16. DCS marks the hold as released and returns hold_id, status (“released”), and released_at.
+    17. Tenant releases the funds on its own ledger.
+Alternate / Exception Flow
+    • If the hold has already been escalated to a freeze, release is rejected until the freeze investigation concludes.
+    • If the hold's TTL has already expired, the system auto-releases it without requiring this call.
+Postconditions: The held funds are made available to the customer and the hold status is updated to released.
+UC-05 — Escalate Hold to Freeze
+Use Case ID
+UC-05
+Name
+Escalate Hold to Freeze
+Actor(s)
+DCS Ops Analyst
+Description
+A DCS operations analyst escalates a time-boxed hold to an indefinite freeze pending investigation, when the transaction shows a confirmed high-risk pattern.
+Preconditions
+A hold exists and the analyst has reviewed supporting risk signals.
+Main Flow
+    18. Analyst reviews the held transaction on the DCS ops dashboard.
+    19. Analyst calls POST /v1/holds/{id}/freeze.
+    20. DCS updates the hold status to frozen; funds remain locked indefinitely.
+    21. DCS notifies the tenant of the freeze via the transaction's decision state.
+Alternate / Exception Flow
+    • If the hold has already been released, escalation is rejected.
+Postconditions: The funds remain locked until a DCS ops analyst resolves the case.
+
+UC-06 — File Dispute
+Use Case ID
+UC-06
+Name
+File Dispute
+Actor(s)
+Bank / MNO / GePG / TIPS System; Customer (via the tenant)
+Description
+A customer or tenant disputes a hold they believe was placed in error, submitting supporting evidence for review.
+Preconditions
+A hold exists on the transaction in question.
+Main Flow
+    22. Customer reports the incorrect hold to the tenant (e.g. via customer support).
+    23. Tenant system sends POST /v1/disputes with hold_id, reason, and evidence_url.
+    24. DCS creates the dispute, sets sla_due_at, and returns dispute_id and status (“open”).
+    25. DCS assigns the dispute to a DCS ops analyst for review (UC-07).
+Alternate / Exception Flow
+    • If the referenced hold_id does not exist, DCS returns a validation error.
+Postconditions: A dispute record exists in an “open” state awaiting analyst review.
+UC-07 — Resolve Dispute
+Use Case ID
+UC-07
+Name
+Resolve Dispute
+Actor(s)
+DCS Ops Analyst
+Description
+A DCS operations analyst reviews an open dispute and records an approval or rejection outcome.
+Preconditions
+An open dispute exists (created via UC-06).
+Main Flow
+    26. Analyst reviews the dispute, hold context, and evidence on the ops dashboard.
+    27. Analyst sends PATCH /v1/disputes/{id} with outcome (“approved” or “rejected”) and a note.
+    28. DCS records the outcome and resolved_at timestamp.
+    29. DCS sends a dispute.resolved webhook event (HMAC-signed) to the tenant's registered callback URL.
+    30. If approved, the tenant proceeds to release the hold (UC-04, included by extension).
+Alternate / Exception Flow
+    • If the webhook delivery fails, DCS retries with exponential backoff for up to 24 hours.
+Postconditions: The dispute is marked resolved with a recorded outcome, and the tenant has been notified asynchronously.
+
+
+
+UC-08 — Subscribe to Webhook Events
+Use Case ID
+UC-08
+Name
+Subscribe to Webhook Events
+Actor(s)
+Bank / MNO / GePG / TIPS System
+Description
+A tenant registers a callback URL, typically once during onboarding, to receive asynchronous DCS events such as dispute resolutions.
+Preconditions
+The tenant has completed API onboarding and holds a valid API key.
+Main Flow
+    31. Tenant system sends POST /v1/webhooks/subscribe with its callback URL.
+    32. DCS validates and stores the subscription, generating a signing secret.
+    33. DCS confirms the subscription is active.
+Alternate / Exception Flow
+    • If the callback URL is unreachable at registration time, DCS flags the subscription for retry validation.
+Postconditions: The tenant's callback URL is registered to receive signed webhook events.
+UC-09 — Check Service Health / SLA
+Use Case ID
+UC-09
+Name
+Check Service Health / SLA
+Actor(s)
+Tenant Monitoring System; DCS Ops Analyst
+Description
+An automated or human actor checks current DCS service health and SLA compliance status.
+Preconditions
+None (unauthenticated or lightly authenticated monitoring endpoint).
+Main Flow
+    34. Actor sends GET /v1/health.
+    35. DCS returns current service health and SLA status.
+Alternate / Exception Flow
+    • If DCS is degraded, the response reflects the degraded state so tenants can apply their fail-open/fail-closed policy.
+Postconditions: The actor has an up-to-date view of DCS operational status.
+
+
+
+5. Sequence Diagrams
+The following UML sequence diagrams illustrate the runtime message flow for the three core DCS workflows: recipient verification, transaction validation, and dispute resolution. Each is presented full-page overleaf for readability.
+
+5.1 Recipient Verification Sequence
+This flow corresponds to UC-01 and occurs at the initial input stage, before any transaction amount is captured. See Figure 3.
+5.2 Transaction Validation Sequence
+This flow corresponds to UC-02, the core synchronous, latency-critical endpoint. The alt fragment in Figure 4 shows the four possible outcomes and how each is enforced by the tenant.
+5.3 Dispute Resolution Sequence
+This flow corresponds to UC-06 and UC-07, and Figure 5 shows the asynchronous webhook notification back to the tenant once a DCS ops analyst records an outcome.
+Sequence Diagram — Recipient Verification
+
+
+
+
+Figure 3
+Sequence Diagram — Real-Time Transaction Validation
+
+Figure 4
+Sequence Diagram — Dispute Filing and Resolution
+
+Figure 5
+6. Functional Requirements
+6.1 Authentication & Tenancy (AUTH)
+REQ-AUTH-01  The system shall require mutual TLS (mTLS) on every API request.
+REQ-AUTH-02  The system shall require a valid, tenant-specific API key in the X-Tenant-Key header on every request; requests with a missing, revoked, or mismatched key shall be rejected with HTTP 401 (invalid_key).
+REQ-AUTH-03  The system shall require a client-generated X-Request-Id header on all state-changing requests (e.g. transaction validation, dispute actions) for idempotency.
+REQ-AUTH-04  If a state-changing request is retried with an X-Request-Id already processed, the system shall return the original result (HTTP 409, duplicate_request) instead of reprocessing the request.
+REQ-AUTH-05  The system shall logically isolate each tenant's data and configuration (e.g. fail-open/fail-closed policy, rate limits) from every other tenant.
+6.2 Recipient Verification (RVER)
+Endpoint: POST /v1/recipients/verify. Realised by UC-01.
+REQ-RVER-01  The system shall accept a recipient verification request containing a hashed recipient reference (recipient_external_ref), the payment channel, and a tenant transaction reference (tenant_txn_ref).
+REQ-RVER-02  The system shall return, in real time, the registered recipient name retrieved from the relevant core banking, MNO, GePG, or TIPS system.
+REQ-RVER-03  The system shall return the recipient's display name in a partially masked format (e.g. "J.M****I").
+REQ-RVER-04  The system shall indicate whether the recipient was verified (verified: true/false).
+REQ-RVER-05  The system shall return supplementary recipient context, including account_age_days and first_time_recipient.
+REQ-RVER-06  The system shall not require transaction amount or other transaction-specific data to perform recipient verification.
+REQ-RVER-07  The system shall support being called both at the initial input stage and again during the transaction process.
+6.3 Transaction Validation (TXVAL)
+Endpoint: POST /v1/transactions/validate. Realised by UC-02.
+REQ-TXVAL-01  The system shall accept a transaction payload containing tenant_txn_ref, user_external_ref, amount, currency, channel, recipient_external_ref, device_fingerprint, and occurred_at.
+REQ-TXVAL-02  The system shall score every submitted transaction using a rule engine and an AI/ML model and return one decision value: allow, warn, hold, freeze, or block.
+REQ-TXVAL-03  The system shall return a numeric risk_score together with the decision.
+REQ-TXVAL-04  The system shall return one or more reason_codes explaining the decision (e.g. AMOUNT_ABOVE_BASELINE).
+REQ-TXVAL-05  The system shall return the model_version used to score the transaction, for auditability.
+REQ-TXVAL-06  The system shall maintain a rolling per-customer behavioural baseline (typical amount, typical recipients, typical time of day).
+REQ-TXVAL-07  When a transaction is unusual for the specific customer but not independently high-risk, the system shall return decision = warn together with an advisory object, and shall allow the transaction to proceed pending customer confirmation, without placing a hold.
+REQ-TXVAL-08  When decision = allow, the transaction proceeds immediately.
+REQ-TXVAL-09  When decision = hold, the system shall pause the funds for ttl_seconds and auto-release unless escalated within that window.
+REQ-TXVAL-10  When decision = freeze, funds shall remain locked indefinitely until resolved by a DCS operations analyst.
+REQ-TXVAL-11  When decision = block, the transaction shall be rejected outright and must never reach the tenant's ledger.
+REQ-TXVAL-12  The system shall meet a response-time budget of p95 < 150 ms and p99 < 300 ms for this endpoint.
+REQ-TXVAL-13  On an SLA breach, the system shall respond consistent with the tenant's fail-open/fail-closed policy and report HTTP 503 (degraded) when service-caused.
+6.4 Transaction Retrieval (TXGET)
+REQ-TXGET-01  The system shall provide GET /v1/transactions/{id} to retrieve the decision, risk score, reason codes, and model version of a previously scored transaction.
+REQ-TXGET-02  The system shall restrict retrieval to the tenant that originally submitted the transaction.
+6.5 Hold, Release & Freeze (HOLD)
+REQ-HOLD-01  The system shall provide POST /v1/holds/{id}/release, accepting released_by and note, and shall return hold_id, status ("released"), and released_at.
+REQ-HOLD-02  The system shall support releasing a hold either manually or automatically on TTL expiry.
+REQ-HOLD-03  The system shall provide POST /v1/holds/{id}/freeze, restricted to DCS operations users.
+6.6 Disputes (DISP)
+REQ-DISP-01  The system shall provide POST /v1/disputes, accepting hold_id, reason, and evidence_url, and shall return dispute_id, status ("open"), and sla_due_at.
+REQ-DISP-02  The system shall provide PATCH /v1/disputes/{id}, restricted to DCS ops analysts, accepting outcome and note, and returning dispute_id, outcome, and resolved_at.
+REQ-DISP-03  On recording a dispute outcome, the system shall asynchronously notify the originating tenant via a dispute.resolved webhook event.
+REQ-DISP-04  If a dispute is approved, the tenant shall be able to call POST /v1/holds/{id}/release.
+6.7 Webhooks (WHK)
+REQ-WHK-01  The system shall provide POST /v1/webhooks/subscribe to register a tenant callback URL.
+REQ-WHK-02  The system shall sign every webhook delivery with an HMAC-SHA256 signature (X-DCS-Signature).
+REQ-WHK-03  The system shall retry failed webhook deliveries with exponential backoff for up to 24 hours.
+REQ-WHK-04  Webhook payloads shall include the event type, relevant entity identifiers, outcome, and a timestamp.
+6.8 Health & Monitoring (HEALTH)
+REQ-HEALTH-01  The system shall provide GET /v1/health, reporting current service health and SLA status.
+REQ-HEALTH-02  The endpoint shall be accessible without consuming the tenant's transactional rate-limit quota.
+6.9 Error Handling (ERR)
+HTTP Status
+Code
+Meaning
+400
+invalid_payload
+Missing or malformed field; request rejected before scoring.
+401
+invalid_key
+X-Tenant-Key missing, revoked, or wrong tenant.
+409
+duplicate_request
+X-Request-Id already processed; original result returned.
+422
+unscoreable
+Payload valid but required feature data unavailable.
+429
+rate_limited
+Per-tenant request quota exceeded.
+503
+degraded
+SLA breach; response follows the tenant's fail-open/fail-closed policy.
+
+REQ-ERR-01  The system shall return the documented HTTP status code and machine-readable error code for every defined error condition above.
+REQ-ERR-02  The system shall reject invalid payloads (HTTP 400) before any fraud scoring is attempted.
+
+
+
+
+7. Database Design
+7.1 Design Overview
+The DCS data model is organised around a Tenant as the top-level partition: every recipient verification, transaction, webhook subscription, and customer baseline belongs to exactly one tenant, which enforces the per-tenant isolation required by REQ-AUTH-05. A Transaction may produce zero or more reason codes and, when its decision is hold, exactly one Hold record. A Hold may in turn receive zero or more Disputes, each optionally resolved by an Ops User (DCS analyst). Webhook Subscriptions belong to a tenant and deliver zero or more Webhook Events. An Audit Log captures administrative and state-changing actions across entities for traceability. The full field-level breakdown of every entity is given in the Entity Dictionary below.
+7.2 Entity Dictionary
+TENANT
+Field
+Type
+Key
+Description
+tenant_id
+string
+PK
+Unique tenant identifier.
+name
+string
+
+Tenant's display name (e.g. bank or MNO name).
+tenant_type
+string
+
+One of: bank | mno | gepg | tips.
+api_key_hash
+string
+
+Hashed per-tenant API key.
+status
+string
+
+active | suspended.
+fail_policy
+string
+
+fail_open | fail_closed, applied on SLA breach.
+created_at
+datetime
+
+Record creation timestamp.
+RECIPIENT_VERIFICATION
+Field
+Type
+Key
+Description
+verification_id
+string
+PK
+Unique verification record identifier.
+tenant_id
+string
+FK
+References TENANT.tenant_id.
+recipient_external_ref
+string
+
+Hashed recipient account/MSISDN reference.
+channel
+string
+
+Payment channel (mobile_money, bank, etc.).
+tenant_txn_ref
+string
+
+Tenant's own transaction reference.
+verified
+boolean
+
+Whether the recipient was successfully verified.
+recipient_display_name
+string
+
+Partially masked recipient name.
+account_age_days
+int
+
+Age of the recipient account in days.
+first_time_recipient
+boolean
+
+Whether this is the sender's first transaction to this recipient.
+created_at
+datetime
+
+Record creation timestamp.
+TRANSACTION
+Field
+Type
+Key
+Description
+transaction_id
+string
+PK
+Unique transaction identifier.
+tenant_id
+string
+FK
+References TENANT.tenant_id.
+tenant_txn_ref
+string
+
+Tenant's own transaction reference.
+user_external_ref
+string
+
+Hashed sender/customer reference.
+amount
+decimal
+
+Transaction amount.
+currency
+string
+
+ISO currency code (e.g. TZS).
+channel
+string
+
+Payment channel.
+recipient_external_ref
+string
+
+Hashed recipient reference.
+device_fingerprint
+string
+
+Device identifier supplied by the tenant.
+occurred_at
+datetime
+
+Time the transaction was initiated.
+decision
+string
+
+allow | warn | hold | freeze | block.
+risk_score
+float
+
+Model-assigned risk score.
+model_version
+string
+
+Identifier of the scoring model version used.
+created_at
+datetime
+
+Record creation timestamp.
+REASON_CODE
+Field
+Type
+Key
+Description
+reason_code_id
+string
+PK
+Unique reason code record identifier.
+transaction_id
+string
+FK
+References TRANSACTION.transaction_id.
+code
+string
+
+Reason code, e.g. AMOUNT_ABOVE_BASELINE.
+HOLD
+Field
+Type
+Key
+Description
+hold_id
+string
+PK
+Unique hold identifier.
+transaction_id
+string
+FK
+References TRANSACTION.transaction_id.
+ttl_seconds
+int
+
+Time-to-live before automatic release.
+status
+string
+
+active | released | frozen.
+released_by
+string
+FK
+References OPS_USER.analyst_id (nullable).
+released_at
+datetime
+
+Timestamp the hold was released (nullable).
+created_at
+datetime
+
+Record creation timestamp.
+DISPUTE
+Field
+Type
+Key
+Description
+dispute_id
+string
+PK
+Unique dispute identifier.
+hold_id
+string
+FK
+References HOLD.hold_id.
+reason
+string
+
+Reason given for the dispute.
+evidence_url
+string
+
+Link to supporting evidence.
+status
+string
+
+open | resolved.
+sla_due_at
+datetime
+
+SLA deadline for resolution.
+outcome
+string
+
+approved | rejected (nullable until resolved).
+analyst_id
+string
+FK
+References OPS_USER.analyst_id (nullable).
+resolved_at
+datetime
+
+Timestamp resolved (nullable).
+OPS_USER
+Field
+Type
+Key
+Description
+analyst_id
+string
+PK
+Unique DCS operations user identifier.
+name
+string
+
+Analyst's full name.
+role
+string
+
+analyst | admin.
+email
+string
+
+Analyst's contact email.
+WEBHOOK_SUBSCRIPTION
+Field
+Type
+Key
+Description
+webhook_id
+string
+PK
+Unique subscription identifier.
+tenant_id
+string
+FK
+References TENANT.tenant_id.
+callback_url
+string
+
+Tenant's registered callback URL.
+secret_hash
+string
+
+Hashed signing secret for HMAC verification.
+created_at
+datetime
+
+Record creation timestamp.
+
+
+WEBHOOK_EVENT
+Field
+Type
+Key
+Description
+event_id
+string
+PK
+Unique event identifier.
+webhook_id
+string
+FK
+References WEBHOOK_SUBSCRIPTION.webhook_id.
+event_type
+string
+
+e.g. dispute.resolved.
+payload
+text/JSON
+
+Serialized event payload delivered to the tenant.
+delivered
+boolean
+
+Whether delivery was acknowledged.
+attempts
+int
+
+Number of delivery attempts made.
+created_at
+datetime
+
+Record creation timestamp.
+CUSTOMER_BASELINE
+Field
+Type
+Key
+Description
+baseline_id
+string
+PK
+Unique baseline record identifier.
+tenant_id
+string
+FK
+References TENANT.tenant_id.
+user_external_ref
+string
+
+Hashed customer reference.
+typical_amount
+decimal
+
+Customer's typical transaction amount.
+typical_recipients
+text/JSON
+
+Set of habitual recipients.
+typical_time_of_day
+string
+
+Customer's typical transaction time window.
+updated_at
+datetime
+
+Last time the baseline was recalculated.
+AUDIT_LOG
+Field
+Type
+Key
+Description
+audit_id
+string
+PK
+Unique audit record identifier.
+tenant_id
+string
+FK
+References TENANT.tenant_id.
+entity_type
+string
+
+Type of entity acted upon (e.g. HOLD, DISPUTE).
+entity_id
+string
+
+Identifier of the affected entity.
+action
+string
+
+Action performed (e.g. release, freeze, resolve).
+actor
+string
+
+Identifier of the acting system or ops user.
+timestamp
+datetime
+
+When the action occurred.
+
+8. Non-Functional Requirements
+8.1 Performance
+REQ-NFR-PERF-01  POST /v1/transactions/validate shall respond within p95 < 150 ms and p99 < 300 ms under normal load.
+REQ-NFR-PERF-02  The system shall support a default rate limit of 200 requests/second per tenant, burstable to 400 requests/second for up to 10 seconds.
+REQ-NFR-PERF-03  The sandbox environment shall mirror production limits at 10% of production quota for pre-production conformance testing.
+8.2 Security
+REQ-NFR-SEC-01  All API traffic shall be encrypted in transit using TLS, with mutual TLS enforced for client authentication.
+REQ-NFR-SEC-02  Recipient and customer identifiers shall be exchanged as hashed references rather than raw account numbers or MSISDNs wherever documented.
+REQ-NFR-SEC-03  Webhook payloads shall be signed (HMAC-SHA256) so tenants can verify authenticity before acting on an event.
+REQ-NFR-SEC-04  Access to operations-only endpoints shall be restricted to authenticated DCS operations users.
+REQ-NFR-SEC-05  The data layer shall enforce tenant row-level security (RLS) so that a tenant's queries and background jobs can never read or write another tenant's records, reinforcing the logical isolation required by REQ-AUTH-05.
+8.3 Reliability & Availability
+REQ-NFR-REL-01  The system shall expose a health endpoint reflecting real-time service and SLA status.
+REQ-NFR-REL-02  On degradation or SLA breach, the system shall behave according to each tenant's pre-configured fail-open or fail-closed policy.
+REQ-NFR-REL-03  Idempotency via X-Request-Id shall prevent duplicate processing of retried state-changing requests.
+8.4 Auditability
+REQ-NFR-AUD-01  Every scored transaction shall retain its decision, risk score, reason codes, and model_version for later retrieval.
+REQ-NFR-AUD-02  Every hold release, freeze escalation, and dispute action shall record the acting party and a timestamp in the audit log.
+8.5 Compatibility & Portability
+REQ-NFR-COMPAT-01  The API shall be channel-agnostic, supporting mobile banking, mobile money, internet banking, USSD, POS, and QR-payment channels.
+REQ-NFR-COMPAT-02  The API shall be usable by Banks, MNOs, GePG, and TIPS participants under a common integration contract.
+
+8.6 Usability
+REQ-NFR-USE-01  Advisory and error messages returned to tenants shall be in plain language suitable for direct display to a customer.
+REQ-NFR-USE-02  API responses shall use consistent, self-describing field names across all endpoints.
+8.7 Maintainability & Scalability
+REQ-NFR-MAINT-01  The AI/ML scoring model shall be versioned (model_version) so updates can be rolled out and rolled back without breaking the response contract.
+REQ-NFR-MAINT-02  The architecture shall allow horizontal scaling of the validation endpoint independently of other components.
+8.8 Legal & Regulatory
+REQ-NFR-LEGAL-01  The system shall support reporting consistent with oversight by BOT, TCRA, and the FIU, per the five-layer architecture in Section 2.2.
+REQ-NFR-LEGAL-02  Customer-identifying data shall be minimised and hashed wherever the documented API contract allows.
+
+
+
+
+
+
+
+
+
+
+
+9. Data Requirements
+9.1 Key Data Objects (API Contracts)
+Object
+Key Fields
+Recipient Verification Request
+recipient_external_ref, channel, tenant_txn_ref
+Recipient Verification Response
+verified, recipient_display_name (masked), account_age_days, first_time_recipient
+Transaction Validation Request
+tenant_txn_ref, user_external_ref, amount, currency, channel, recipient_external_ref, device_fingerprint, occurred_at
+Transaction Validation Response
+decision, risk_score, reason_codes[], advisory{message, baseline_amount, current_amount}, model_version
+Dispute
+dispute_id, hold_id, reason, evidence_url, status, sla_due_at, outcome, resolved_at
+Webhook Event
+event, dispute_id, hold_id, outcome, resolved_at (signed via X-DCS-Signature)
+9.2 Data Handling Constraints
+    • Recipient and user identifiers must be passed as hashed references, not raw account numbers or MSISDNs.
+    • Display names returned to tenants for presentation must be partially masked.
+    • Decision, score, and reason codes for each transaction must be retained for later retrieval and audit.
+10. Requirements Traceability Matrix
+The matrix below maps each API endpoint to its realising use case and functional requirements.
+Endpoint
+Use Case
+Related Requirements
+POST /v1/recipients/verify
+UC-01
+REQ-RVER-01..07
+POST /v1/transactions/validate
+UC-02
+REQ-TXVAL-01..13, REQ-NFR-PERF-01
+GET /v1/transactions/{id}
+UC-03
+REQ-TXGET-01..02, REQ-NFR-AUD-01
+POST /v1/holds/{id}/release
+UC-04
+REQ-HOLD-01..02, REQ-DISP-04
+POST /v1/holds/{id}/freeze
+UC-05
+REQ-HOLD-03
+POST /v1/disputes
+UC-06
+REQ-DISP-01
+PATCH /v1/disputes/{id}
+UC-07
+REQ-DISP-02..03
+POST /v1/webhooks/subscribe
+UC-08
+REQ-WHK-01..04
+GET /v1/health
+UC-09
+REQ-HEALTH-01..02, REQ-NFR-REL-01
+11. Assumptions, Dependencies & Risks
+11.1 Assumptions
+    • Tenants can integrate the recipient-verification call into their existing entry flow without material redesign.
+    • Core banking/MNO/GePG/TIPS systems expose a queryable registry of account/wallet names for recipient verification.
+    • Tenants maintain accurate device fingerprinting on their own client apps to support behavioural scoring.
+11.2 Dependencies
+    • Availability of tenant core systems for recipient name lookups.
+    • Tenant webhook receivers being reachable for asynchronous event delivery.
+    • A sufficient volume of historical transaction data per customer to build a meaningful behavioural baseline.
+11.3 Risks
+Risk
+Potential Impact
+Mitigation
+Cold-start customers with no baseline
+Behavioural warn logic cannot detect anomalies for new customers.
+Apply conservative default thresholds until sufficient history accumulates.
+SLA breach under peak load
+Fail-open/fail-closed policy triggers, risking either missed fraud or blocked legitimate transactions.
+Horizontal scaling, load testing, and per-tenant rate limiting.
+Webhook delivery failure
+Tenant does not learn a dispute was resolved.
+Exponential-backoff retries for 24h and a pull-based fallback (GET /v1/transactions/{id}).
+False positives on legitimate large transactions
+Customer friction from unnecessary warn/hold decisions.
+Continual model tuning and reason-code-driven explainability.
+
+
+
+
+
+12. Appendix
+12.1 Open Items for Stakeholder Confirmation
+    • Exact thresholds separating warn / hold / freeze / block decisions and how they map to risk_score ranges.
+    • Default ttl_seconds value(s) for holds, and whether this is tenant-configurable.
+    • Full set of reason_codes beyond the example AMOUNT_ABOVE_BASELINE.
+    • Data retention period for scored transactions, holds, and disputes.
+    • Roles/permissions model for DCS operations users (freeze escalation, dispute outcome).
+    • Multi-region/disaster-recovery requirements beyond the stated SLA budgets.
+12.2 Notation Reference
+    • System architecture diagram (Figure 1): each layer is annotated with a reference numeral (101–105) for cross-referencing in supporting documentation.
+    • Use case diagram (Figure 2): actors are shown as stick figures outside the system boundary, numbered 201–204; use cases are shown as ellipses inside it, numbered 210–219, per UML 2.5 convention.
+    • Sequence diagrams (Figures 3–5): solid arrows denote synchronous calls, dashed arrows denote returns; alt fragments denote mutually exclusive alternative flows.
+    • Entity Dictionary (Section 7.2): field-level definitions for every table, with primary keys (PK) and foreign keys (FK) marked in the Key column.
