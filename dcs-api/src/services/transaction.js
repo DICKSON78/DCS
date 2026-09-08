@@ -289,15 +289,17 @@ export async function scoreTransaction({ tenantId, tenantTxnRef, userExternalRef
     },
   });
 
+  let holdObj;
   if (decision === 'hold') {
     const ttlSeconds = 30 * 60;
-    await prisma.hold.create({
+    const hold = await prisma.hold.create({
       data: {
         transaction_id: txn.transaction_id,
         ttl_seconds: ttlSeconds,
         status: 'active',
       },
     });
+    holdObj = { hold_id: hold.hold_id, status: hold.status, ttl_seconds: ttlSeconds };
   }
 
   await updateBaseline(baseline, features, recipientExternalRef);
@@ -313,5 +315,6 @@ export async function scoreTransaction({ tenantId, tenantTxnRef, userExternalRef
     advisory,
     model_version: MODEL_VERSION,
     ttl_seconds: decision === 'hold' ? 30 * 60 : undefined,
+    hold: holdObj,
   };
 }

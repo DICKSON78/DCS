@@ -3,6 +3,7 @@ import { verifyRequestSignature } from './request-sign.js';
 
 export function registerTenantAuth(fastify) {
   fastify.addHook('onRequest', async (request) => {
+    if (request.method === 'OPTIONS') return;
     if (request.url === '/v1/health') return;
     if (request.url.startsWith('/docs')) return;
     if (request.url.startsWith('/v1/audit/')) return;
@@ -13,6 +14,7 @@ export function registerTenantAuth(fastify) {
   });
 
   fastify.addHook('preHandler', async (request) => {
+    if (request.method === 'OPTIONS') return;
     if (request.url === '/v1/health') return;
     if (request.url.startsWith('/docs')) return;
     if (request.url.startsWith('/v1/audit/')) return;
@@ -27,6 +29,7 @@ export function registerTenantAuth(fastify) {
 export function registerOpsAuth(fastify) {
   fastify.addHook('onRequest', async (request) => {
     if (request.url === '/v1/health') return;
+    if (request.method === 'OPTIONS') return;
     const isOpsRoute =
       request.url.startsWith('/v1/ops/') ||
       (request.url.startsWith('/v1/holds/') && request.url.endsWith('/freeze')) ||

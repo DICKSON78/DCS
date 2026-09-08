@@ -18,6 +18,7 @@ export const config = {
   port: parseInt(process.env.PORT || '8080', 10),
   logLevel: process.env.LOG_LEVEL || 'info',
   opsBearerToken: loadSecret('OPS_BEARER_TOKEN', 'OPS_BEARER_TOKEN_FILE'),
+  corsOrigin: process.env.CORS_ORIGIN || true,
   rateLimit: {
     perSecond: parseInt(process.env.RATE_LIMIT_PER_SECOND || '200', 10),
     burstPerSecond: parseInt(process.env.RATE_LIMIT_BURST_PER_SECOND || '400', 10),

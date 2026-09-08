@@ -40,7 +40,12 @@ export async function verifyRequestSignature(request) {
 
   const [method, pathname] = [request.method, request.url.split('?')[0]];
   const query = request.url.split('?')[1] || '';
-  const body = typeof request.body === 'string' ? request.body : JSON.stringify(request.body || {});
+  const body =
+    typeof request.body === 'string'
+      ? request.body
+      : request.body
+        ? JSON.stringify(request.body)
+        : '';
 
   const expected = signRequest({ signingSecret, timestamp, method, path: pathname, query, body });
 

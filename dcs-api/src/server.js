@@ -51,7 +51,7 @@ export async function buildServer() {
   });
   await fastify.register(swaggerUi, { routePrefix: '/docs' });
   await fastify.register(helmet, { global: true });
-  await fastify.register(cors, { origin: false });
+  await fastify.register(cors, { origin: config.corsOrigin });
 
   installSandboxLookup();
 
