@@ -140,7 +140,9 @@ Interactive docs are served at `/docs`. Summary:
 | `POST /v1/disputes` | File a dispute against a hold |
 | `PATCH /v1/disputes/:id` | Ops — resolve a dispute (approved/rejected) |
 | `POST /v1/webhooks/subscribe` | Register a callback URL for hold/dispute events |
-| `GET  /v1/audit/verify/:tenantId` | Ops — verify audit-chain integrity |
+| `POST /v1/audit/verify/:tenantId` | Ops — verify audit-chain integrity |
+| `POST /v1/ops/tenants/:id/rotate-api-key` | Ops — issue a new tenant API key (returned exactly once) |
+| `POST /v1/ops/tenants/:id/rotate-signing-key` | Ops — rotate the HMAC request-signing secret |
 | `GET  /v1/health` | Liveness + real p95/p99 SLA metrics + audit chain status |
 
 Webhook events are delivered with an `X-DCS-Signature` HMAC header so callbacks can be verified.
@@ -176,6 +178,37 @@ Decision bands: `allow <25`, `warn 25-59`, `hold 60-79`, `block >=80`. Holds aut
 - **PII protection** — recipient/user references are stored SHA-256 hashed (`h_…`); names are masked.
 - **Rate limiting** — per-tenant token bucket (200 rps steady, 400 burst).
 - **TTL cleanup** — expired nonces and idempotency records are pruned hourly.
+- **Credential rotation** — ops endpoints issue a fresh API key / signing secret; the previous credential is rejected immediately and the in-memory registry follows the new key.
+
+## Transport security (TLS / mTLS)
+
+Corridor traffic (BOT / TIPS / GePG) should terminate TLS + mutual TLS in front of DCS:
+
+```bash
+# DCS-side TLS (optional if nginx terminates):
+TLS_ENABLED="true"
+TLS_CERT_FILE="/etc/dcs/tls/server.crt"
+TLS_KEY_FILE="/etc/dcs/tls/server.key"
+TLS_CA_FILE="/etc/dcs/tls/corridor-ca.crt"        # CA that signs gateway client certs
+TLS_REQUEST_CLIENT_CERT="true"                    # require a client cert
+TLS_REJECT_UNAUTHORIZED="true"                    # reject unknown client certs
+```
+
+Webhook callbacks can also present a corridor client certificate:
+
+```bash
+WEBHOOK_CLIENT_CERT_FILE="/etc/dcs/tls/webhook-client.crt"
+WEBHOOK_CLIENT_KEY_FILE="/etc/dcs/tls/webhook-client.key"
+WEBHOOK_CA_FILE="/etc/dcs/tls/gateway-ca.crt"
+```
+
+A ready-made nginx reverse-proxy that verifies each gateway's corridor CA-issued client cert is in `dcs-api/deploy/nginx-mtls.conf`.
+
+## Secrets & vault integration
+
+- Ops bearer token can be injected by a vault as a mounted file:
+  `OPS_BEARER_TOKEN_FILE="/run/secrets/dcs_ops_token"` (takes precedence over the env var).
+- Before production, move tenant signing secrets out of the plaintext `signing_key_hash` column into KMS/HSM-backed encryption and inject the master key via the same file mechanism.
 
 ---
 

@@ -23,7 +23,7 @@
     "tanzania",
     "recipient-verification"
   ],
-  "author": "DCS",
+  "author": "Dr. Mshindi Andrew Rwamuhuru",
   "license": "ISC",
   "dependencies": {
     "@fastify/cors": "^11.3.0",

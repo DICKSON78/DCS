@@ -1,6 +1,7 @@
 import { sha256, constantTimeEqual } from '../utils/crypto.js';
 import { ApiError, errorCodes } from '../utils/errors.js';
 import { resolveTenant } from '../services/tenant-registry.js';
+import { config } from '../config/index.js';
 
 export async function authenticateTenant(request) {
   const apiKey = request.headers['x-tenant-key'];
@@ -30,7 +31,7 @@ export async function requireOpsUser(request) {
     throw new ApiError(401, 'invalid_key', 'Authorization header is required');
   }
 
-  const expected = process.env.OPS_BEARER_TOKEN;
+  const expected = config.opsBearerToken;
   if (!expected || !constantTimeEqual(token, expected)) {
     throw new ApiError(401, 'invalid_key', 'Invalid ops token');
   }
