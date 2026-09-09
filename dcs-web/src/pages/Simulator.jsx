@@ -56,6 +56,7 @@ export default function Simulator() {
         ]);
         if (res.status === 200 && res.body?.senders) {
           setCustomers(res.body);
+          setTxnRef(freshRef());
           const first = res.body.senders[0];
           if (first) {
             setForm({
@@ -111,7 +112,7 @@ export default function Simulator() {
     setStep("home");
   };
 
-  async function confirmRecipient() {
+  async function confirmRecipient(ref) {
     setVerifying(true);
     setError(null);
     try {
@@ -122,7 +123,7 @@ export default function Simulator() {
         payload: {
           recipient_external_ref: form.recipient,
           channel: "mobile_money",
-          tenant_txn_ref: txnRef,
+          tenant_txn_ref: ref || txnRef,
         },
         apiKey: creds.apiKey,
         signingSecret: creds.signingSecret,
@@ -430,7 +431,7 @@ export default function Simulator() {
                 ) : step === "amount" ? (
                   <AmountStep form={form} sender={sender} recipient={recipient} setForm={setForm} back={() => setStep("recipient")} next={() => setStep("pin")} />
                 ) : step === "pin" ? (
-                  <StepPin pin={pin} setPin={setPin} back={() => setStep("amount")} next={() => { setTxnRef(freshRef()); setStep("confirm"); confirmRecipient(); }} />
+                  <StepPin pin={pin} setPin={setPin} back={() => setStep("amount")} next={() => { const ref = freshRef(); setTxnRef(ref); setStep("confirm"); confirmRecipient(ref); }} />
                 ) : step === "confirm" ? (
                   <StepConfirm form={form} sender={sender} recipient={recipient} recipientFullName={recipientFullName} verify={verify} verifying={verifying} txnRef={txnRef} occurredAt={occurredAt} running={running} back={() => setStep("pin")} send={sendMoney} />
                 ) : (
