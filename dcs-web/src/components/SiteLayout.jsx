@@ -1,14 +1,16 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Outlet } from "react-router-dom";
+import { useState } from "react";
 import { useCredentials } from "../lib/credentials.jsx";
 import SiteHeader from "./SiteHeader.jsx";
 import SiteFooter from "./SiteFooter.jsx";
 
 export default function SiteLayout() {
   const { creds, setCreds, open, setOpen } = useCredentials();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <>
-      <SiteHeader />
+      <SiteHeader menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
       <Outlet />
       <SiteFooter />
 
@@ -63,7 +65,7 @@ export default function SiteLayout() {
           Sandbox defaults are pre-filled (test bank tenant). Requests are signed with
           HMAC-SHA256 in the browser and carry a fresh nonce, exactly like the gateway SDK.
         </p>
-        <button className="btn btn-" style={{ marginTop: 16 }} onClick={() => setOpen(false)}>
+        <button className="btn btn-sm" style={{ marginTop: 16 }} onClick={() => setOpen(false)}>
           <i className="fa-solid fa-check" /> Save connection
         </button>
       </div>

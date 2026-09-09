@@ -33,8 +33,8 @@ const SCENARIOS = [
     icon: "fa-clock-rotate-left",
     title: "Replay & tampering in the corridor",
     body: "Every request is signed with HMAC-SHA256 over a timestamp window plus a one-time nonce. A replayed or tampered request is rejected before it is processed.",
-    cta: "See signed requests in action",
-    to: "/simulator",
+    cta: "Read the signing spec",
+    to: "/docs",
   },
   {
     icon: "fa-scale-balanced",
@@ -52,55 +52,97 @@ const BANDS = [
   { decision: "block", score: "≥ 80", color: "badge-block", text: "Transfer is rejected outright — the transaction never reaches the gateway." },
 ];
 
+const HERO_CODE = (
+  <>
+    <span className="tok-e">POST</span> <span className="tok-f">/v1/transactions/validate</span> <span className="tok-e">HTTP</span>/1.1{"\n"}
+    <span className="tok-e">x-tenant-key</span>: <span className="tok-s">test-api-key-0001</span>{"\n"}
+    <span className="tok-e">x-timestamp</span>: <span className="tok-n">1720000000000</span>{"\n"}
+    <span className="tok-e">x-nonce</span>: <span className="tok-s">"4f2a…c1d9"</span>{"\n"}
+    <span className="tok-e">x-signature</span>: <span className="tok-s">"9a3b…ff"</span>{"\n"}
+    <span className="tok-e">content-type</span>: <span className="tok-s">application/json</span>{"\n"}
+    {"\n"}
+    {"{"}{"\n"}
+    {"  "}<span className="tok-s">"tenant_txn_ref"</span>: <span className="tok-s">"TX-1001"</span>,{"\n"}
+    {"  "}<span className="tok-s">"user_external_ref"</span>: <span className="tok-s">"255712345678"</span>,{"\n"}
+    {"  "}<span className="tok-s">"amount"</span>: <span className="tok-n">120000</span>,{"\n"}
+    {"  "}<span className="tok-s">"currency"</span>: <span className="tok-s">"TZS"</span>,{"\n"}
+    {"  "}<span className="tok-s">"recipient_external_ref"</span>: <span className="tok-s">"255714567890"</span>,{"\n"}
+    {"  "}<span className="tok-s">"device_fingerprint"</span>: <span className="tok-s">"device-a1b2c3"</span>{"\n"}
+    {"}"}{"\n"}
+    {"\n"}
+    <span className="tok-c">{"// "}200</span> <span className="tok-k">hold</span> · score <span className="tok-n">72.4</span> {"\n"}
+    <span className="tok-c">{"// ["}HIGH_TXN_VELOCITY, DEVICE_CHANGE]</span>
+  </>
+);
+
 export default function Home() {
   return (
     <>
       <section className="hero">
-        <div className="container">
-          <span className="eyebrow">Digital Consumer Shield</span>
-          <h1>
-            One question before money settles:{" "}
-            <span className="grad-text">is this transfer safe?</span>
-          </h1>
-          <p>
-            DCS sits in front of a payment gateway and answers that question in real time for
-            Tanzania's banks, mobile-money operators, GePG and TIPS. It verifies the recipient,
-            scores the transaction against the customer's own behaviour, and holds or blocks the
-            transfers that predict money loss — before the money moves.
-          </p>
-          <div className="hero-cta">
-            <Link to="/simulator" className="btn">
-              <i className="fa-solid fa-bolt" /> Try the transaction simulator
-            </Link>
-            <Link to="/verify" className="btn btn-ghost">
-              <i className="fa-solid fa-user-check" /> Verify a recipient
-            </Link>
+        <div className="hero-inner">
+          <div>
+            <span className="eyebrow">Digital Consumer Shield</span>
+            <h1>
+              One question before money settles:{" "}
+              <span className="grad-text">is this transfer safe?</span>
+            </h1>
+            <p className="hero-sub">
+              DCS sits in front of a payment gateway and answers that question in real time for
+              Tanzania's banks, mobile-money operators, GePG and TIPS. It verifies the recipient,
+              scores the transaction against the customer's own behaviour, and holds or blocks
+              the transfers that predict money loss — before the money moves.
+            </p>
+            <div className="hero-actions">
+              <Link to="/simulator" className="btn">
+                <i className="fa-solid fa-bolt" /> Try the simulator
+              </Link>
+              <Link to="/verify" className="btn btn-ghost">
+                <i className="fa-solid fa-user-check" /> Verify a recipient
+              </Link>
+            </div>
+            <div className="hero-meta">
+              <span>Every call is signed &amp; replay-proof</span>
+              <code>HMAC-SHA256</code>
+              <code>x-nonce</code>
+            </div>
           </div>
 
-          <div className="hero-stats">
-            <div className="stat">
-              <strong>0.30s</strong>
-              <span>decision time (p99 SLA)</span>
+          <div className="hero-code reveal">
+            <div className="code-top">
+              <span className="r" /><span className="y" /><span className="g" />
+              <em>dcs — validate</em>
             </div>
-            <div className="stat">
-              <strong>4 bands</strong>
-              <span>allow → warn → hold → block</span>
-            </div>
-            <div className="stat">
-              <strong>5 min</strong>
-              <span>signature timestamp window</span>
-            </div>
-            <div className="stat">
-              <strong>48 hr</strong>
-              <span>dispute resolution SLA</span>
-            </div>
+            <pre>{HERO_CODE}</pre>
           </div>
         </div>
       </section>
 
       <section className="section-pad">
         <div className="container">
-          <div className="section-head center">
+          <div className="hero-stats">
+            <div className="stat reveal">
+              <strong>0.30s</strong>
+              <span>decision time (p99 SLA)</span>
+            </div>
+            <div className="stat reveal">
+              <strong className="blue">4 bands</strong>
+              <span>allow → warn → hold → block</span>
+            </div>
+            <div className="stat reveal">
+              <strong>5 min</strong>
+              <span>signature timestamp window</span>
+            </div>
+            <div className="stat reveal">
+              <strong className="blue">48 hr</strong>
+              <span>dispute resolution SLA</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="section-pad" style={{ paddingTop: 0 }}>
+        <div className="container">
+          <div className="section-head center reveal">
             <span className="eyebrow">Why DCS exists</span>
             <h2>Real money is lost today through predictable gaps</h2>
             <p>
@@ -110,14 +152,14 @@ export default function Home() {
           </div>
 
           <div className="grid grid-2">
-            {SCENARIOS.map((s) => (
-              <Link key={s.title} to={s.to} className="card card-link">
+            {SCENARIOS.map((s, i) => (
+              <Link key={s.title} to={s.to} className="card card-link reveal">
                 <h3>
-                  <i className={"fa-solid " + s.icon} style={{ color: "var(--accent)" }} />
+                  <i className={"fa-solid " + s.icon} style={{ color: "var(--gold)" }} />
                   {s.title}
                 </h3>
                 <p>{s.body}</p>
-                <p className="step mt">{s.cta} →</p>
+                <p className="step">{s.cta} →</p>
               </Link>
             ))}
           </div>
@@ -126,11 +168,16 @@ export default function Home() {
 
       <section className="section-pad" style={{ background: "var(--ink-2)" }}>
         <div className="container">
-          <div className="section-head center">
+          <div className="section-head center reveal">
             <span className="eyebrow">How decisions work</span>
             <h2>Four bands. One clear answer.</h2>
+            <p>
+              The engine explains itself: every decision ships with the risk score and the fraud
+              signals that fired. Read the full specification in the{" "}
+              <Link to="/docs" className="inline" style={{ color: "var(--blue-2)" }}>API documentation</Link>.
+            </p>
           </div>
-          <div className="card">
+          <div className="card reveal">
             <table className="bands" style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
@@ -157,14 +204,14 @@ export default function Home() {
 
       <section className="section-pad">
         <div className="container">
-          <div className="section-head center">
+          <div className="section-head center reveal">
             <span className="eyebrow">The tools</span>
             <h2>Three consoles, one protection layer</h2>
           </div>
           <div className="grid grid-3">
-            <div className="card">
+            <div className="card reveal">
               <h3>
-                <i className="fa-solid fa-bolt" style={{ color: "var(--accent)" }} /> Simulator
+                <i className="fa-solid fa-bolt" style={{ color: "var(--gold)" }} /> Simulator
               </h3>
               <p>
                 Fire real transactions at the DCS rule engine. Watch the risk score climb as
@@ -174,9 +221,9 @@ export default function Home() {
                 Open simulator
               </Link>
             </div>
-            <div className="card">
+            <div className="card reveal">
               <h3>
-                <i className="fa-solid fa-user-check" style={{ color: "var(--accent)" }} /> Recipient
+                <i className="fa-solid fa-user-check" style={{ color: "var(--gold)" }} /> Recipient
                 verification
               </h3>
               <p>
@@ -187,16 +234,32 @@ export default function Home() {
                 Open verification
               </Link>
             </div>
-            <div className="card">
+            <div className="card reveal">
               <h3>
-                <i className="fa-solid fa-scale-balanced" style={{ color: "var(--accent)" }} /> Ops
-                console
+                <i className="fa-solid fa-book" style={{ color: "var(--gold)" }} /> API docs
               </h3>
               <p>
-                The operator view: freeze a hold, release a hold, file and resolve disputes,
-                look up a transaction, and prove the audit chain is untampered.
+                Full endpoint reference: signing, decision bands, reason codes, errors, sandbox
+                credentials and copy-paste request examples.
               </p>
-              <Link to="/ops" className="btn btn-sm mt">
+              <Link to="/docs" className="btn btn-sm btn-blue mt">
+                Open documentation
+              </Link>
+            </div>
+          </div>
+
+          <div className="card mt reveal" style={{ marginTop: 26, borderColor: "rgba(59,130,246,.4)" }}>
+            <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ flex: "1 1 360px" }}>
+                <h3>
+                  <i className="fa-solid fa-scale-balanced" style={{ color: "var(--blue)" }} /> Ops console
+                </h3>
+                <p>
+                  The operator view with the ops bearer token: freeze a hold, release a hold, file
+                  and resolve disputes, look up a transaction, and prove the audit chain is tamper-evident.
+                </p>
+              </div>
+              <Link to="/ops" className="btn btn-sm">
                 Open ops console
               </Link>
             </div>

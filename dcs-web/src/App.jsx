@@ -4,6 +4,7 @@ import Home from "./pages/Home.jsx";
 import Simulator from "./pages/Simulator.jsx";
 import Verify from "./pages/Verify.jsx";
 import Ops from "./pages/Ops.jsx";
+import Docs from "./pages/Docs.jsx";
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/simulator" element={<Simulator />} />
         <Route path="/verify" element={<Verify />} />
         <Route path="/ops" element={<Ops />} />
+        <Route path="/docs" element={<Docs />} />
       </Route>
     </Routes>
   );
