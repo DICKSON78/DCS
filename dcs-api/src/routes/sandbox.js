@@ -24,9 +24,10 @@ export function registerSandboxRoutes(fastify) {
           registered_name: c.registered_name,
           display_name: maskName(c.registered_name),
           account_age_days: c.account_age_days,
+          balance: c.balance,
           note: c.note,
           known_devices: c.known_devices,
-          typical_amount: c.typical_amount,
+          typical_amount: c.typical_amount ? Number(c.typical_amount) : null,
           typical_recipients: c.typical_recipients,
         }));
 

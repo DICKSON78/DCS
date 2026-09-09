@@ -40,12 +40,12 @@ console.log('  tenant-test-0001  api_key=test-api-key-0001  signing=test-signing
 console.log('  tenant-mno-0002   api_key=mno-api-key-0002   signing=mno-signing-key-0002  fail_policy=closed');
 
 const SENDERS = [
-  { ref: '2557000777', name: 'Baraka Mwishi', age: 1850, note: 'Mfanyabiashara — akaunti ya miaka 5, kawaida anasafisha kuomba, hupenda kutuma asubuhi.', devices: ['device-a1', 'device-a2'], typical: 600000, recipients: ['255712345678', '255712345680'] },
-  { ref: '2557000888', name: 'Neema Charles', age: 540, note: 'Mama wa kawaida — hutuma malipo ya shule kama kila mwezi.', devices: ['device-m2'], typical: 150000, recipients: ['255712345679'] },
-  { ref: '2557000999', name: 'Juma Said', age: 0, note: 'Amejiunga LEO (day zero) — hii ni akaunti mpya kabisa.', devices: ['device-j3'], typical: 20000, recipients: [] },
-  { ref: '2557111222', name: 'Zawadi Kato', age: 3, note: 'Akaunti ya siku 3 tu — je mdogo sana, angalia!', devices: ['device-z4'], typical: 50000, recipients: ['255713456789'] },
-  { ref: '2557333444', name: 'Emmanuel Luoga', age: 900, note: 'Mfanyakazi wa kampuni — hupokea mshahara kwa benki hii.', devices: ['device-e5'], typical: 400000, recipients: ['255712345680', '255713456789'] },
-  { ref: '2557555666', name: 'Aisha Mwakyusa', age: 2100, note: 'Mwenyekiti wa vikoba — hutuma kwa wanachama wake kupitia simu moja tu.', devices: ['device-a6'], typical: 350000, recipients: [] },
+  { ref: '2557000777', name: 'Baraka Mwishi', age: 1850, note: 'Mfanyabiashara — akaunti ya miaka 5, kawaida anasafisha kuomba, hupenda kutuma asubuhi.', balance: 2400000, devices: ['device-a1', 'device-a2'], typical: 600000, recipients: ['255712345678', '255712345680'] },
+  { ref: '2557000888', name: 'Neema Charles', age: 540, note: 'Mama wa kawaida — hutuma malipo ya shule kama kila mwezi.', balance: 1200000, devices: ['device-m2'], typical: 150000, recipients: ['255712345679'] },
+  { ref: '2557000999', name: 'Juma Said', age: 0, note: 'Amejiunga LEO (day zero) — hii ni akaunti mpya kabisa.', balance: 180000, devices: ['device-j3'], typical: 20000, recipients: [] },
+  { ref: '2557111222', name: 'Zawadi Kato', age: 3, note: 'Akaunti ya siku 3 tu — je mdogo sana, angalia!', balance: 500000, devices: ['device-z4'], typical: 50000, recipients: ['255713456789'] },
+  { ref: '2557333444', name: 'Emmanuel Luoga', age: 900, note: 'Mfanyakazi wa kampuni — hupokea mshahara kwa benki hii.', balance: 4000000, devices: ['device-e5'], typical: 400000, recipients: ['255712345680', '255713456789'] },
+  { ref: '2557555666', name: 'Aisha Mwakyusa', age: 2100, note: 'Mwenyekiti wa vikoba — hutuma kwa wanachama wake kupitia simu moja tu.', balance: 3500000, devices: ['device-a6'], typical: 350000, recipients: [] },
 ];
 
 const RECIPIENTS = [
@@ -65,11 +65,20 @@ for (const s of SENDERS) {
       registered_name: s.name,
       account_age_days: s.age,
       note: s.note,
+      balance: s.balance,
       known_devices: s.devices,
       typical_amount: s.typical,
       typical_recipients: s.recipients,
     },
-    update: {},
+    update: {
+      registered_name: s.name,
+      account_age_days: s.age,
+      note: s.note,
+      balance: s.balance,
+      known_devices: s.devices,
+      typical_amount: s.typical,
+      typical_recipients: s.recipients,
+    },
   });
 }
 
@@ -83,7 +92,11 @@ for (const r of RECIPIENTS) {
       account_age_days: r.age,
       note: r.note,
     },
-    update: {},
+    update: {
+      registered_name: r.name,
+      account_age_days: r.age,
+      note: r.note,
+    },
   });
 }
 

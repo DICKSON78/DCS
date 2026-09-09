@@ -7,13 +7,24 @@ const nf = (n) => (typeof n === "number" ? "TZS " + Math.round(n).toLocaleString
 
 const TAG_CLASS = { allow: "s-tag-allow", hold: "s-tag-hold", block: "s-tag-block" };
 
+const initials = (name) =>
+  String(name || "?")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+
+const AVATARS = ["var(--gradient-blue)", "linear-gradient(135deg,#2dd4bf 0%,#06b6d4 100%)", "linear-gradient(135deg,#f6b60c 0%,#ffd766 100%)"];
+
 export default function Simulator() {
   const { creds } = useCredentials();
   const [customers, setCustomers] = useState(null);
   const [scenarios, setScenarios] = useState([]);
   const [custErr, setCustErr] = useState(null);
   const [form, setForm] = useState(null);
-  const [step, setStep] = useState("customer");
+  const [step, setStep] = useState("home");
   const [pin, setPin] = useState("");
   const [verify, setVerify] = useState(null);
   const [verifying, setVerifying] = useState(false);
@@ -50,7 +61,8 @@ export default function Simulator() {
             setForm({
               sender: first.external_ref,
               recipient: res.body.recipients[0]?.external_ref || "",
-              amount: 100000,
+              customRecipient: false,
+              amount: first.typical_amount || 100000,
               device: first.known_devices?.[0] || first.external_ref + "-dev",
               night: false,
             });
@@ -76,6 +88,12 @@ export default function Simulator() {
     [customers, form?.recipient]
   );
 
+  const recipientFullName = useMemo(() => {
+    if (recipient) return recipient.registered_name;
+    if (verify?.recipient_display_name) return verify.recipient_display_name;
+    return form?.recipient ? form.recipient : "";
+  }, [recipient, verify, form]);
+
   const occurredAt = useMemo(() => {
     if (!form) return new Date().toISOString();
     const d = new Date();
@@ -90,7 +108,7 @@ export default function Simulator() {
     setAct("idle");
     setPin("");
     setTxnRef(freshRef());
-    setStep("customer");
+    setStep("home");
   };
 
   async function confirmRecipient() {
@@ -240,14 +258,14 @@ export default function Simulator() {
 
   const journey = useMemo(() => {
     const steps = [];
-    steps.push({ id: "customer", status: "done", icon: "fa-solid fa-user", sw: "Mteja: " + (sender ? sender.display_name : form?.sender), en: "customer selected from directory" });
+    steps.push({ id: "customer", status: "done", icon: "fa-solid fa-user", sw: "Mteja: " + (sender ? sender.display_name : form?.sender), en: "wallet opened with real balance" });
     if (verify) {
       steps.push({
         id: "recipient",
         status: "done",
         icon: "fa-solid fa-magnifying-glass",
-        sw: "Mpokeaji: " + (verify.recipient_display_name || form?.recipient) + " — siku " + (verify.account_age_days ?? "?"),
-        en: verify.verified ? "registered name confirmed" : "NOT in registry — caution",
+        sw: "Mpokeaji: " + (recipientFullName) + " — siku " + (verify.account_age_days ?? "?"),
+        en: verify.verified ? "registered name confirmed" : "NOT in registry — you confirm yourself",
       });
     }
     if (outcome) {
@@ -288,12 +306,12 @@ export default function Simulator() {
       }
     }
     return steps;
-  }, [sender, form, verify, outcome, act]);
+  }, [sender, form, verify, outcome, act, recipientFullName]);
 
   const sms = useMemo(() => {
     if (!outcome) return null;
     const time = new Date(occurredAt).toLocaleTimeString("en-TZ", { hour: "2-digit", minute: "2-digit" });
-    const rName = verify?.recipient_display_name || form?.recipient;
+    const rName = recipientFullName;
     const amt = nf(Number(form?.amount));
     if (outcome.decision === "allow") {
       return {
@@ -316,7 +334,7 @@ export default function Simulator() {
         tone: "block",
         brand: "DCS-WALLET",
         time,
-        body: `Tuma imesitishwa — utangamano hatari ulionekana: ${(outcome.reason_codes || []).join(", ")}.\nPesa zako hazikutoka nje. Simu 100 kwa usaidizi.\nRef: ${outcome.transaction_id}`,
+        body: `Tuma ya ${amt} kwa ${rName} imesitishwa.\nIshara za hatari: ${(outcome.reason_codes || []).join(", ")}.\nPesa zako hazikutoka nje. Simu 100 kwa usaidizi.\nRef: ${outcome.transaction_id}`,
       };
     }
     if (act === "idle") {
@@ -349,18 +367,18 @@ export default function Simulator() {
       time,
       body: `${amt} zimesalia kwenye hold ya ${outcome.hold?.hold_id}.\nUchunguzi unaendelea...`,
     };
-  }, [outcome, verify, form, act, occurredAt]);
+  }, [outcome, verify, form, act, occurredAt, recipientFullName]);
 
   return (
     <section className="section-pad">
       <div className="container">
         <div className="section-head">
           <span className="eyebrow">Sandbox ya simu — jaribu mwenyewe</span>
-          <h2>Tuma pesa kama ungefanya kwenye app halisi</h2>
+          <h2>Tuma pesa kama katika app ya benki</h2>
           <p>
-            Hii ni sandbox kama M-Pesa/Tigo-Pesa: chagua mteja, chagua mpokeaji, weka PIN,
-            kisha DCS inakagua jina la mpokeaji, inakokotoa hatari na inaamua — <b className="mono">allow · warn · hold · block</b>.
-            Ukiwa umekosea namba, utaona jina halisi la mmiliki na kughairi <i>kabla ya pesa kutoka</i>.
+            Hii ni sandbox kama app ya kifedha (uproad tayari umeona): fungua pochi, salio la kweli kutoka kwenye
+            hifadhidata, chagua mpokeaji kwenye kitabu cha simu, weka kiasi — kisha DCS inakagua jina, inakokotoa
+            hatari na inaamua <b className="mono">allow · warn · hold · block</b>. Ukikosea namba, utaona kabla ya pesa kutoka.
           </p>
         </div>
 
@@ -397,24 +415,26 @@ export default function Simulator() {
               </div>
 
               <div className="phone-body">
-                {!form ? (
+                {!form || !customers ? (
                   <div className="app-step">
                     <div className="app-step-body">
                       <div className="muted" style={{ fontSize: 13, padding: "18px 4px" }}>
-                        <span className="spinner" /> Inapakia wateja wa sandbox...
+                        <span className="spinner" /> Inapakia pochi ya sandbox...
                       </div>
                     </div>
                   </div>
-                ) : step === "customer" ? (
-                  <Step1 form={form} sender={sender} setForm={setForm} senders={customers.senders} next={() => setStep("send")} />
-                ) : step === "send" ? (
-                  <Step2 form={form} sender={sender} setForm={setForm} recipients={customers.recipients} back={() => setStep("customer")} next={() => setStep("pin")} />
+                ) : step === "home" ? (
+                  <WalletHome form={form} sender={sender} setForm={setForm} senders={customers.senders} next={() => setStep("recipient")} />
+                ) : step === "recipient" ? (
+                  <PhoneBook recipients={customers.recipients} form={form} setForm={setForm} back={() => setStep("home")} next={() => setStep("amount")} />
+                ) : step === "amount" ? (
+                  <AmountStep form={form} sender={sender} recipient={recipient} setForm={setForm} back={() => setStep("recipient")} next={() => setStep("pin")} />
                 ) : step === "pin" ? (
-                  <StepPin pin={pin} setPin={setPin} back={() => setStep("send")} next={() => { setTxnRef(freshRef()); setStep("confirm"); confirmRecipient(); }} />
+                  <StepPin pin={pin} setPin={setPin} back={() => setStep("amount")} next={() => { setTxnRef(freshRef()); setStep("confirm"); confirmRecipient(); }} />
                 ) : step === "confirm" ? (
-                  <StepConfirm form={form} sender={sender} recipient={recipient} verify={verify} verifying={verifying} txnRef={txnRef} occurredAt={occurredAt} running={running} back={() => setStep("pin")} send={sendMoney} />
+                  <StepConfirm form={form} sender={sender} recipient={recipient} recipientFullName={recipientFullName} verify={verify} verifying={verifying} txnRef={txnRef} occurredAt={occurredAt} running={running} back={() => setStep("pin")} send={sendMoney} />
                 ) : (
-                  <ResultBody outcome={outcome} sender={sender} recipient={recipient} form={form} act={act} actBusy={actBusy}
+                  <ResultBody outcome={outcome} sender={sender} recipient={recipient} recipientFullName={recipientFullName} form={form} act={act} actBusy={actBusy}
                     doRelease={doRelease} doFreeze={doFreeze} doDispute={doDispute} doResolve={doResolve}
                     reset={resetRun} />
                 )}
@@ -434,7 +454,7 @@ export default function Simulator() {
               <i className="fa-solid fa-route" style={{ color: "var(--gold)" }} /> Safari ya pesa zako
             </h3>
             <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-              Kila hatua inaonyeshwa kwenye upande wa simu. Ukiona <b className="mono" style={{ color: "#fbbf24" }}>hold</b> au{" "}
+              Kila hatua inaonyeshwa. Ukiona <b className="mono" style={{ color: "#fbbf24" }}>hold</b> au{" "}
               <b className="mono" style={{ color: "#f87171" }}>block</b>, pesa hazitoki nje — DCS inazilinda.
             </p>
 
@@ -517,7 +537,7 @@ export default function Simulator() {
                   style={{ padding: "11px" }}
                   disabled={!form}
                   onClick={() => {
-                    setForm((prev) => ({ ...prev, sender: p.sender, recipient: p.recipient, amount: p.amount ?? 100000, device, night: Boolean(p.night) }));
+                    setForm((prev) => ({ ...prev, sender: p.sender, recipient: p.recipient, customRecipient: false, amount: p.amount ?? 100000, device, night: Boolean(p.night) }));
                     setError(null);
                     setVerify(null);
                     setPin("");
@@ -536,62 +556,147 @@ export default function Simulator() {
   );
 }
 
-function Step1({ form, sender, setForm, senders, next }) {
+function WalletHome({ form, sender, setForm, senders, next }) {
   return (
     <div className="app-step">
       <div className="app-step-top">
         <span className="app-step-n done">1</span>
         <div>
-          <div className="app-step-title">Wewe ni mteja gani?</div>
-          <div className="app-step-en">choos your account (namba yako)</div>
+          <div className="app-step-title">Pochi yako</div>
+          <div className="app-step-en">wallet — real balance from the sandbox DB</div>
         </div>
       </div>
       <div className="app-step-body">
-        <select className="phone-select" value={form.sender} onChange={(e) => setForm((f) => ({ ...f, sender: e.target.value }))}>
+        <select className="phone-select" value={form.sender} onChange={(e) => setForm((f) => ({ ...f, sender: e.target.value, amount: (senders.find((s) => s.external_ref === e.target.value)?.typical_amount) || f.amount }))}>
           {senders.map((s) => (
             <option key={s.external_ref} value={s.external_ref}>
-              {s.registered_name} · {s.external_ref} · siku {s.account_age_days}
+              {s.registered_name} · {s.external_ref}
             </option>
           ))}
         </select>
-        {sender && (
-          <div className="balance-strip" style={{ marginTop: 12 }}>
-            <span className="lbl">Wako sasa</span>
-            <span className="amt">{nf(sender.typical_amount)}</span>
+
+        <div className="wallet-hero">
+          <div className="w-row">
+            <span className="w-ico"><i className="fa-solid fa-wallet" /></span>
+            <span className="w-meta">
+              <span className="w-label">Salio lako</span>
+              <span className="w-name">{sender?.registered_name}</span>
+            </span>
+            <span className="w-ccy">TZS</span>
           </div>
-        )}
-        {sender?.note && <p className="muted" style={{ fontSize: 12, margin: "10px 2px 0", lineHeight: 1.5 }}>{sender.note}</p>}
+          <div className="w-balance">{nf(sender?.balance ?? 0)}</div>
+          <div className="w-sub">Pochi ya DCS · siku {sender?.account_age_days}</div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
+          <div className="action-tile">
+            <i className="fa-solid fa-phone-volume" />
+            <span>Lipia</span>
+            <small>pochi & beki</small>
+          </div>
+          <div className="action-tile">
+            <i className="fa-solid fa-down-left-and-up-right-to-center" />
+            <span>Pokea</span>
+            <small>namba yako</small>
+          </div>
+        </div>
+        <p className="muted" style={{ fontSize: 11.5, margin: "8px 2px 0", lineHeight: 1.5 }}>
+          {sender?.note}
+        </p>
         <button className="phone-btn phone-btn-gold" style={{ marginTop: 14 }} onClick={next}>
-          Endelea <i className="fa-solid fa-chevron-right" />
+          <i className="fa-solid fa-paper-plane" /> Tuma pesa
         </button>
       </div>
     </div>
   );
 }
 
-function Step2({ form, sender, setForm, recipients, back, next }) {
-  const knownDevices = (sender?.known_devices || []).filter(Boolean);
+function PhoneBook({ recipients, form, setForm, back, next }) {
+  const [q, setQ] = useState("");
+  const [custom, setCustom] = useState(false);
+  const [manual, setManual] = useState("");
+  const filtered = recipients.filter((r) =>
+    (r.registered_name || "").toLowerCase().includes(q.toLowerCase()) || r.external_ref.includes(q)
+  );
   return (
     <div className="app-step">
       <div className="app-step-top">
         <span className="app-step-n done">2</span>
         <div>
-          <div className="app-step-title">Tuma pesa</div>
-          <div className="app-step-en">send money — recipient + amount</div>
+          <div className="app-step-title">Chagua mpokeaji</div>
+          <div className="app-step-en">phone book — contacts from the sandbox DB</div>
         </div>
       </div>
       <div className="app-step-body">
-        <label className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6 }}>Namba ya kupokea</label>
-        <select className="phone-select" style={{ marginTop: 6 }} value={form.recipient} onChange={(e) => setForm((f) => ({ ...f, recipient: e.target.value }))}>
-          {recipients.map((r) => (
-            <option key={r.external_ref} value={r.external_ref}>
-              {r.external_ref} · {r.registered_name} (siku {r.account_age_days})
-            </option>
+        <input className="phone-input" style={{ marginTop: 0 }} type="search" placeholder="Tafuta jina au namba..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+          {filtered.map((r, i) => (
+            <button className="contact" key={r.external_ref} onClick={() => { setForm((f) => ({ ...f, recipient: r.external_ref, customRecipient: false })); next(); }}>
+              <span className="c-ava" style={{ background: AVATARS[i % AVATARS.length] }}>{initials(r.registered_name)}</span>
+              <span className="c-body">
+                <span className="c-name">{r.registered_name}</span>
+                <span className="c-sub">{r.external_ref} · akaunti ya siku {r.account_age_days}</span>
+              </span>
+              <i className="fa-solid fa-chevron-right c-go" />
+            </button>
           ))}
-        </select>
+          <button className="contact contact-new" onClick={() => setCustom((v) => !v)}>
+            <span className="c-ava" style={{ background: "var(--gradient-gold)", color: "#06101f" }}><i className="fa-solid fa-plus" /></span>
+            <span className="c-body">
+              <span className="c-name">Namba nyingine mpya</span>
+              <span className="c-sub">sio kwenye kitabu — ingiza wewe</span>
+            </span>
+            <i className="fa-solid fa-chevron-down c-go" />
+          </button>
+          {custom && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <input className="phone-input" type="tel" inputMode="numeric" placeholder="mfano 255777000000" value={manual} onChange={(e) => setManual(e.target.value.replace(/\D/g, ""))} />
+              <p className="muted" style={{ fontSize: 11, lineHeight: 1.5 }}>
+                Namba mpya haikatiliwi moja kwa moja — DCS itaangalia jina, na ukithibitisha mwenyewe pesa zitatumwa.
+              </p>
+              <button className="phone-btn phone-btn-gold" disabled={manual.replace(/\D/g, "").length < 8} onClick={() => { setForm((f) => ({ ...f, recipient: manual.replace(/\D/g, ""), customRecipient: true })); next(); }}>
+                Endelea na namba hii <i className="fa-solid fa-chevron-right" />
+              </button>
+            </div>
+          )}
+        </div>
+        <button className="phone-btn phone-btn-ghost" style={{ marginTop: 12 }} onClick={back}>
+          <i className="fa-solid fa-arrow-left" /> Nyuma
+        </button>
+      </div>
+    </div>
+  );
+}
 
+function AmountStep({ form, sender, recipient, setForm, back, next }) {
+  const knownDevices = (sender?.known_devices || []).filter(Boolean);
+  const amount = Number(form.amount) || 0;
+  const quicks = [10000, 50000, 100000, 300000, sender?.typical_amount ? Number(sender.typical_amount) : null].filter((v, i, a) => v && a.indexOf(v) === i);
+  return (
+    <div className="app-step">
+      <div className="app-step-top">
+        <span className="app-step-n done">3</span>
+        <div>
+          <div className="app-step-title">Weka kiasi</div>
+          <div className="app-step-en">amount — full recipient name before sending</div>
+        </div>
+      </div>
+      <div className="app-step-body">
+        <TransferCard
+          sender={sender}
+          recipient={recipient}
+          amount={form.amount}
+          showAmount
+        />
         <label className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, display: "block", marginTop: 12 }}>Kiasi (TZS)</label>
-        <input className="phone-input" style={{ marginTop: 6 }} type="number" min={1} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+        <input className="phone-input" style={{ marginTop: 6 }} type="number" min={1} max={sender?.balance || undefined} value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {quicks.map((v) => (
+            <button key={v} className={"phone-btn quick-chip " + (amount === v ? "quick-on" : "phone-btn-ghost")} style={{ padding: "7px 10px", width: "auto", fontSize: 11.5 }} onClick={() => setForm((f) => ({ ...f, amount: v }))}>
+              {nf(v)}
+            </button>
+          ))}
+        </div>
 
         <label className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, display: "block", marginTop: 12 }}>Simu yako (device)</label>
         <select className="phone-select" style={{ marginTop: 6 }} value={form.device} onChange={(e) => setForm((f) => ({ ...f, device: e.target.value }))}>
@@ -611,10 +716,32 @@ function Step2({ form, sender, setForm, recipients, back, next }) {
           <button className="phone-btn phone-btn-ghost" style={{ width: "auto", flex: 1 }} onClick={back}>
             <i className="fa-solid fa-arrow-left" /> Nyuma
           </button>
-          <button className="phone-btn phone-btn-gold" style={{ width: "auto", flex: 2 }} onClick={next}>
+          <button className="phone-btn phone-btn-gold" style={{ width: "auto", flex: 2 }} disabled={!amount || amount <= 0} onClick={next}>
             Endelea <i className="fa-solid fa-chevron-right" />
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TransferCard({ sender, recipient, recipientFullName, amount, decision, showAmount }) {
+  const rName = recipientFullName || recipient?.registered_name || "Mpokeaji";
+  return (
+    <div className="transfer">
+      <div className="t-side">
+        <span className="t-ava" style={{ background: "var(--gradient-blue)" }}>{initials(sender?.registered_name)}</span>
+        <span className="t-name">{sender?.registered_name || "Wewe"}</span>
+        <span className="t-sub">ANAYETUMA</span>
+      </div>
+      <div className="t-mid">
+        {showAmount && amount ? <span className="t-amount">{nf(Number(amount))}</span> : <span className="t-arrow"><i className="fa-solid fa-arrow-right" /></span>}
+        {decision && <DecisionBadge decision={decision} />}
+      </div>
+      <div className="t-side">
+        <span className="t-ava" style={{ background: "var(--gradient-gold)", color: "#06101f" }}>{initials(rName)}</span>
+        <span className="t-name">{rName}</span>
+        <span className="t-sub">ANAYEPOKEA · {recipient?.external_ref || "namba mpya"}</span>
       </div>
     </div>
   );
@@ -628,7 +755,7 @@ function StepPin({ pin, setPin, back, next }) {
   return (
     <div className="app-step">
       <div className="app-step-top">
-        <span className="app-step-n done">3</span>
+        <span className="app-step-n done">4</span>
         <div>
           <div className="app-step-title">Weka PIN yako</div>
           <div className="app-step-en">enter your PIN (sandbox: yoyote)</div>
@@ -660,46 +787,43 @@ function StepPin({ pin, setPin, back, next }) {
   );
 }
 
-function StepConfirm({ form, sender, recipient, verify, verifying, txnRef, occurredAt, running, back, send }) {
+function StepConfirm({ form, sender, recipient, recipientFullName, verify, verifying, txnRef, occurredAt, running, back, send }) {
   return (
     <div className="app-step">
       <div className="app-step-top">
-        <span className="app-step-n done">4</span>
+        <span className="app-step-n done">5</span>
         <div>
           <div className="app-step-title">Hakikisha umemtuma sahihi</div>
           <div className="app-step-en">confirm — like “Hakikisha” in real apps</div>
         </div>
       </div>
       <div className="app-step-body">
-        <div className="recipient-confirm">
-          <div className="small">
-            Inaondoka kwako: <b style={{ color: "#fff" }}>{sender?.registered_name}</b>
-          </div>
-          <div className="money">{nf(Number(form.amount))}</div>
-          <div className="small">kwenda</div>
+        <TransferCard sender={sender} recipient={recipient} recipientFullName={recipientFullName} amount={form.amount} showAmount />
 
-          {verifying ? (
-            <div className="muted"><span className="spinner" /> Inakagua jina la mpokeaji...</div>
-          ) : verify ? (
-            <>
-              <div className="big-name">{verify.recipient_display_name || form.recipient}</div>
-              <div className="small">
-                {form.recipient} · akaunti ya siku {verify.account_age_days ?? "?"} · {verify.verified ? "imeandikwa kwenye daftari rasmi" : "HAIPO kwenye daftari rasmi"}
+        {verifying ? (
+          <div className="muted" style={{ textAlign: "center", fontSize: 12 }}><span className="spinner" /> Inakagua jina la mpokeaji...</div>
+        ) : verify ? (
+          <div className="recipient-confirm" style={{ marginTop: 12 }}>
+            <div className="small">
+              {form.customRecipient ? "Namba mpya (sio kitabu)" : "Mpokeaji:"}{" "}
+              <b style={{ color: "#fff" }}>{recipientFullName}</b>
+            </div>
+            <div className="small">
+              {form.recipient} · akaunti ya siku {verify.account_age_days ?? "?"} · {verify.verified ? "imeandikwa kwenye daftari rasmi ✓" : "HAIPO kwenye daftari rasmi"}
+            </div>
+            {verify.first_time_recipient && (
+              <div className="warn-line">
+                <i className="fa-solid fa-triangle-exclamation" /> Kwanza kabisa kumtumia mtu huyu — hakikisha sana!
               </div>
-              {verify.first_time_recipient && (
-                <div className="warn-line">
-                  <i className="fa-solid fa-triangle-exclamation" /> Kwanza kabisa kumtumia mtu huyu — hakikisha sana!
-                </div>
-              )}
-              {!verify.verified && (
-                <div className="warn-line">
-                  <i className="fa-solid fa-triangle-exclamation" /> Ikiwa ulikosea namba, BONYEZA NYUMA usitume.
-                </div>
-              )}
-            </>
-          ) : null}
-          {sender && <div className="small" style={{ fontFamily: "var(--mono)", marginTop: 6 }}>ref {txnRef} · {new Date(occurredAt).toLocaleTimeString("en-TZ", { hour: "2-digit", minute: "2-digit" })}</div>}
-        </div>
+            )}
+            {!verify.verified && (
+              <div className="warn-line">
+                <i className="fa-solid fa-triangle-exclamation" /> Namba hii haina jina lililosajiliwa — wewe ndiwe uthibitisho wa mwisho. Ukikosea, BONYEZA NYUMA usitume.
+              </div>
+            )}
+            <div className="small" style={{ fontFamily: "var(--mono)", marginTop: 6 }}>ref {txnRef} · {new Date(occurredAt).toLocaleTimeString("en-TZ", { hour: "2-digit", minute: "2-digit" })}</div>
+          </div>
+        ) : null}
 
         <p className="muted" style={{ fontSize: 11.5, lineHeight: 1.6, textAlign: "center" }}>
           “Huyu ndiye unayemtumia?” — DCS inalinda pesa zako kukagua hii kabla zisitoke.
@@ -718,20 +842,20 @@ function StepConfirm({ form, sender, recipient, verify, verifying, txnRef, occur
   );
 }
 
-function ResultBody({ outcome, form, act, actBusy, doRelease, doFreeze, doDispute, doResolve, reset }) {
+function ResultBody({ outcome, form, sender, recipient, recipientFullName, act, actBusy, doRelease, doFreeze, doDispute, doResolve, reset }) {
   if (!outcome) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="app-step">
         <div className="app-step-body" style={{ paddingTop: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between" }}>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Matokeo ya uchunguzi</div>
-            <DecisionBadge decision={outcome.decision} />
-          </div>
+          <TransferCard sender={sender} recipient={recipient} recipientFullName={recipientFullName} amount={form.amount} showAmount decision={outcome.decision} />
+          <p className="muted" style={{ fontSize: 11.5, textAlign: "center", margin: "10px 0 0" }}>
+            Alama ya hatari: <b>{outcome.risk_score?.toFixed(1) ?? "—"}/100</b> · {outcome.reason_codes?.length ? outcome.reason_codes.join(" · ") : "hakuna ishara"}
+          </p>
 
           {outcome.decision === "allow" && (
             <p style={{ fontSize: 12.5, color: "#86efac", lineHeight: 1.6, margin: "10px 0 0" }}>
-              <i className="fa-solid fa-circle-check" /> Pesa zimepelekwa — mpokeaji ni anayejulikana, hakuna hatari. Salama.
+              <i className="fa-solid fa-circle-check" /> Pesa zimepelekwa — mpokeaji anajulikana, hakuna hatari. Salama.
             </p>
           )}
           {outcome.decision === "warn" && (

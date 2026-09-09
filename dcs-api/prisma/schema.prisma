@@ -173,6 +173,7 @@ model SandboxCustomer {
   registered_name    String
   account_age_days   Int
   note               String?
+  balance            Int      @default(0)
   known_devices      Json?
   typical_amount     Decimal? @db.Decimal(18, 2)
   typical_recipients Json?

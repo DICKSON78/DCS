@@ -955,3 +955,68 @@ table.doc-table { width: 100%; border-collapse: collapse; font-size: 14px; min-w
 .s-tag-block { background: rgba(239,68,68,0.15); color: #f87171; }
 .scenario p { font-size: 13px; color: #aebacc; line-height: 1.6; margin: 0 0 12px; }
 .scenario .flow { font-size: 11.5px; font-family: var(--mono); color: #5c6b80; letter-spacing: 0.3px; margin-bottom: 14px; }
+
+/* Wallet home (bank-app style) */
+.wallet-hero {
+  margin-top: 12px; border-radius: 16px; padding: 16px 16px 14px;
+  background:
+    radial-gradient(120% 160% at 110% -10%, rgba(246,182,12,0.22), transparent 60%),
+    radial-gradient(120% 160% at -10% 120%, rgba(30,91,219,0.35), transparent 55%),
+    linear-gradient(150deg, #101b30, #0a1120);
+  border: 1px solid #1f2d4a;
+}
+.w-row { display: flex; align-items: center; gap: 10px; }
+.w-ico { width: 34px; height: 34px; border-radius: 10px; background: var(--gradient-gold); color: #06101f; display: grid; place-items: center; font-size: 15px; }
+.w-meta { display: flex; flex-direction: column; line-height: 1.2; }
+.w-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.8px; color: #8ea1bd; }
+.w-name { font-size: 13px; font-weight: 700; color: #fff; }
+.w-ccy { margin-left: auto; font-size: 11px; color: #ffd766; font-weight: 800; letter-spacing: 1px; }
+.w-balance { margin-top: 12px; font-size: 26px; font-weight: 800; letter-spacing: 0.4px; color: #fff; font-variant-numeric: tabular-nums; }
+.w-sub { margin-top: 6px; font-size: 11px; color: #6f82a0; }
+
+/* Action tiles */
+.action-tile {
+  background: rgba(16,24,40,0.7); border: 1px solid #1b2740; border-radius: 12px;
+  padding: 10px; display: flex; flex-direction: column; gap: 3px; cursor: default;
+}
+.action-tile i { color: var(--gold); font-size: 15px; }
+.action-tile span { font-size: 12.5px; font-weight: 700; color: #e4eaf3; }
+.action-tile small { font-size: 10px; color: #5c6b80; }
+
+/* Phone book contacts */
+.contact {
+  width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
+  background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 8px 8px;
+  color: inherit; cursor: pointer;
+}
+.contact:hover { background: rgba(30,91,219,0.12); border-color: rgba(30,91,219,0.35); }
+.c-ava {
+  width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+  color: #fff; font-weight: 800; font-size: 13px; flex: none;
+}
+.c-body { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.c-name { font-size: 13px; font-weight: 700; color: #eef3fa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-sub { font-size: 11px; color: #5c6b80; }
+.c-go { margin-left: auto; color: #3d4c66; font-size: 12px; }
+.contact-new { border: 1px dashed #2b3b57; }
+.contact-new:hover { border-color: rgba(246,182,12,0.5); background: rgba(246,182,12,0.08); }
+
+/* Transfer card — sender left / recipient right */
+.transfer {
+  display: flex; align-items: stretch; gap: 8px; margin-top: 12px;
+  background: #0a1120; border: 1px solid #1c2839; border-radius: 16px; padding: 14px 12px;
+}
+.t-side { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; text-align: center; }
+.t-ava {
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  color: #fff; font-weight: 800; font-size: 15px; box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+.t-name { font-size: 12.5px; font-weight: 700; color: #eef3fa; line-height: 1.25; overflow-wrap: anywhere; }
+.t-sub { font-size: 9px; letter-spacing: 0.5px; color: #5c6b80; text-transform: uppercase; }
+.t-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; flex: none; min-width: 96px; }
+.t-amount { font-size: 13px; font-weight: 800; color: #ffd766; text-align: center; font-variant-numeric: tabular-nums; }
+.t-arrow { color: var(--gold); font-size: 16px; }
+
+/* Quick amount chips */
+.quick-chip { width: auto; font-size: 11.5px; padding: 7px 10px; }
+.quick-on { background: var(--gradient-gold); color: #06101f; border-color: var(--gradient-gold); font-weight: 700; }
