@@ -35,6 +35,7 @@ export default function Simulator() {
   const [actBusy, setActBusy] = useState(false);
   const [error, setError] = useState(null);
   const [txnRef, setTxnRef] = useState("");
+  const [txnId, setTxnId] = useState("");
   const freshRef = () => "SIM-" + Math.floor(Date.now() / 1000) + "-" + Math.floor(Math.random() * 900 + 100);
 
   useEffect(() => {
@@ -112,6 +113,20 @@ export default function Simulator() {
     setStep("home");
   };
 
+  const refreshCustomers = async () => {
+    try {
+      const res = await dcsRequest({
+        baseUrl: creds.baseUrl,
+        method: "GET",
+        path: "/v1/sandbox/customers",
+        opsToken: creds.opsToken,
+      });
+      if (res.status === 200 && res.body?.senders) setCustomers(res.body);
+    } catch {
+      /* keep current balances */
+    }
+  };
+
   async function confirmRecipient(ref) {
     setVerifying(true);
     setError(null);
@@ -163,6 +178,25 @@ export default function Simulator() {
         throw new Error(res.body?.message || "Kosa la API (" + res.status + ")");
       }
       setOutcome(res.body);
+      setTxnId(res.body.transaction_id);
+
+      const dec = res.body.decision;
+      if (dec === "allow" || dec === "warn" || dec === "hold") {
+        const settled = await dcsRequest({
+          baseUrl: creds.baseUrl,
+          method: "POST",
+          path: "/v1/transactions/" + res.body.transaction_id + "/settle",
+          payload: {},
+          apiKey: creds.apiKey,
+          signingSecret: creds.signingSecret,
+        });
+        if (settled.status !== 200 && settled.status !== 201) {
+          setError("Hati ya malipo haikupokelewa: " + (settled.body?.message || settled.status));
+        } else {
+          res.body.settled = settled.body;
+        }
+      }
+      await refreshCustomers();
       setStep("result");
     } catch (err) {
       setError(String(err.message || err));
@@ -185,6 +219,7 @@ export default function Simulator() {
       });
       if (res.status !== 200) throw new Error(res.body?.message || "Imekosa kuruhusu.");
       setAct("released");
+      await refreshCustomers();
     } catch (err) {
       setError(String(err.message || err));
     } finally {
@@ -250,6 +285,7 @@ export default function Simulator() {
       });
       if (res.status !== 200) throw new Error(res.body?.message || "Uamuzi haukupokelewa.");
       setAct("resolved");
+      await refreshCustomers();
     } catch (err) {
       setError(String(err.message || err));
     } finally {
@@ -279,6 +315,16 @@ export default function Simulator() {
         en: (outcome.reason_codes?.length ? outcome.reason_codes.join(" · ") : "no signals fired"),
       });
       steps.push({ id: "decision", status: outcome.decision === "block" ? "blocked" : "done", icon: "fa-solid fa-gavel", sw: "Uamuzi: " + outcome.decision.toUpperCase(), en: "decision engine v" + outcome.model_version });
+
+      if (outcome.decision === "allow" || outcome.decision === "warn" || outcome.decision === "hold") {
+        steps.push({
+          id: "ledger",
+          status: "done",
+          icon: "fa-solid fa-book",
+          sw: "Akaunti zimefanyiwa mabadiliko (debit/credit halisi)",
+          en: outcome.decision === "hold" ? "escrow reserve · atomic \$transaction" : "atomic \$transaction · balance ≥ amount guard",
+        });
+      }
 
       if (outcome.decision === "hold" && outcome.hold) {
         const holdState = resolveHoldState(act);
@@ -853,6 +899,63 @@ function ResultBody({ outcome, form, sender, recipient, recipientFullName, act, 
           <p className="muted" style={{ fontSize: 11.5, textAlign: "center", margin: "10px 0 0" }}>
             Alama ya hatari: <b>{outcome.risk_score?.toFixed(1) ?? "—"}/100</b> · {outcome.reason_codes?.length ? outcome.reason_codes.join(" · ") : "hakuna ishara"}
           </p>
+
+          {(outcome.decision === "allow" || outcome.decision === "warn" || outcome.decision === "hold") && (
+            <div
+              style={{
+                marginTop: 12,
+                background: "#0b1220",
+                border: "1px solid #1e293b",
+                borderRadius: 10,
+                padding: "10px 12px",
+                fontSize: 12,
+                lineHeight: 1.7,
+                color: "#cbd5e1",
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: 10.5, letterSpacing: 1, textTransform: "uppercase", color: "#7dd3fc", marginBottom: 2 }}>
+                <i className="fa-solid fa-book" style={{ marginRight: 5 }} />
+                Ledger (double-entry) — hifadhidata
+              </div>
+              <div>
+                {outcome.decision === "hold" || act === "released" || act === "resolved" ? (
+                  <>
+                    <div>
+                      <span className="muted">Salio lako: </span>
+                      <b>{nf(sender?.balance ?? 0)}</b>
+                      {act !== "released" && act !== "resolved" && (
+                        <span style={{ color: "#fda4af" }}> (&minus;{nf(Number(form?.amount))} kwenye hold)</span>
+                      )}
+                    </div>
+                    {act === "released" && (
+                      <>
+                        <div>
+                          <span className="muted">Salio la {recipientFullName}: </span>
+                          <b>{nf(recipient?.balance ?? 0)}</b> <span style={{ color: "#86efac" }}>(+{nf(Number(form?.amount))})</span>
+                        </div>
+                        <div style={{ color: "#94a3b8" }}>Escrow: imetolewa → mishahara ya mpokeaji</div>
+                      </>
+                    )}
+                    {act === "resolved" && (
+                      <div style={{ color: "#86efac" }}>Escrow imepunguzwa — refund +{nf(Number(form?.amount))} (tumerejesha kwako)</div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <span className="muted">Salio lako: </span>
+                      <b>{nf(sender?.balance ?? 0)}</b> <span style={{ color: "#fda4af" }}>&minus;{nf(Number(form?.amount))}</span>
+                    </div>
+                    <div>
+                      <span className="muted">Salio la {recipientFullName}: </span>
+                      <b>{nf(recipient?.balance ?? 0)}</b> <span style={{ color: "#86efac" }}>+{nf(Number(form?.amount))}</span>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: "#64748b" }}>Guard: salio halikwenda chini ya sifuri — atomic UPDATE … WHERE balance ≥ amount</div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {outcome.decision === "allow" && (
             <p style={{ fontSize: 12.5, color: "#86efac", lineHeight: 1.6, margin: "10px 0 0" }}>
