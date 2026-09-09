@@ -862,7 +862,9 @@ table.doc-table { width: 100%; border-collapse: collapse; font-size: 14px; min-w
 .phone-title b { background: linear-gradient(120deg, var(--gold), var(--gold-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .phone-sub { position: absolute; right: 16px; font-size: 10px; color: #5c6b80; font-family: var(--mono); letter-spacing: 0.5px; }
 
-.phone-body { flex: 1; padding: 4px 18px 14px; display: flex; flex-direction: column; gap: 12px; }
+.phone-body { flex: 1; min-height: 0; padding: 4px 18px 14px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.phone-body::-webkit-scrollbar { width: 6px; }
+.phone-body::-webkit-scrollbar-thumb { background: #1c2634; border-radius: 10px; }
 
 .app-step { border: 1px solid #16202e; border-radius: 14px; background: rgba(13, 20, 33, 0.7); }
 .app-step-top { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
