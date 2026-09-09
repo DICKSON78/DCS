@@ -230,7 +230,7 @@ export function buildAdvisory(currentAmount, baselineAmount) {
   };
 }
 
-export async function scoreTransaction({ tenantId, tenantTxnRef, userExternalRef, amount, currency, channel, recipientExternalRef, deviceFingerprint, occurredAt }) {
+export async function scoreTransaction({ tenantId, tenantTxnRef, userExternalRef, senderRef, recipientRef, amount, currency, channel, recipientExternalRef, deviceFingerprint, occurredAt }) {
   const features = computeRiskFeatures({ amount, currency, channel, occurred_at: occurredAt, device_fingerprint: deviceFingerprint });
 
   const baseline = await loadOrCreateBaseline(tenantId, userExternalRef);
@@ -274,6 +274,8 @@ export async function scoreTransaction({ tenantId, tenantTxnRef, userExternalRef
       tenant_id: tenantId,
       tenant_txn_ref: tenantTxnRef,
       user_external_ref: userExternalRef,
+      sender_ref: senderRef,
+      recipient_ref: recipientRef,
       amount: amount,
       currency,
       channel,

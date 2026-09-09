@@ -3,6 +3,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { ApiError } from '../utils/errors.js';
 import { scoreTransaction } from '../services/transaction.js';
 import { buildFailPolicyDecision, shouldApplyFailPolicy } from '../services/fail-policy.js';
+import { settleTransfer } from '../services/ledger.js';
 import { prisma } from '../lib/prisma.js';
 import { hashIdentifier } from '../utils/crypto.js';
 import { idempotencyGuard } from '../middleware/idempotency.js';
@@ -43,6 +44,8 @@ export function registerTransactionRoutes(fastify) {
             currency: parsed.data.currency,
             channel: parsed.data.channel,
             recipientExternalRef: hashIdentifier(parsed.data.recipient_external_ref),
+            senderRef: parsed.data.user_external_ref,
+            recipientRef: parsed.data.recipient_external_ref,
             deviceFingerprint: parsed.data.device_fingerprint,
             occurredAt: parsed.data.occurred_at,
           });
@@ -78,6 +81,80 @@ export function registerTransactionRoutes(fastify) {
         reason_codes: txn.reasonCodes.map((r) => r.code),
         model_version: txn.model_version,
         created_at: txn.created_at,
+      });
+    })
+  );
+
+  fastify.post(
+    '/v1/transactions/:id/settle',
+    {
+      schema: {
+        summary: 'Atomically apply a validated decision to the ledger (debit sender / credit recipient)',
+        tags: ['transactions'],
+      },
+    },
+    asyncHandler(async (request, reply) => {
+      const { id } = request.params;
+
+      const txn = await prisma.transaction.findUnique({
+        where: { transaction_id: id },
+        include: { hold: true },
+      });
+
+      if (!txn || txn.tenant_id !== request.tenantId) {
+        throw new ApiError(404, 'not_found', 'Transaction not found');
+      }
+
+      const existing = await prisma.ledgerEntry.findFirst({ where: { reference: id } });
+      if (existing) {
+        throw new ApiError(409, 'conflict', 'Transaction already settled');
+      }
+
+      let fromRef;
+      let toRef;
+      let kind;
+      let action;
+      if (txn.decision === 'allow' || txn.decision === 'warn') {
+        action = 'transfer';
+        fromRef = txn.sender_ref;
+        toRef = txn.recipient_ref;
+        kind = 'transfer';
+      } else if (txn.decision === 'hold') {
+        action = 'hold_reserve';
+        fromRef = txn.sender_ref;
+        toRef = '__ESCROW__';
+        kind = 'hold_reserve';
+      } else {
+        throw new ApiError(409, 'conflict', 'Decision ' + txn.decision + ' does not move money');
+      }
+
+      if (!fromRef || !toRef) {
+        throw new ApiError(422, 'unprocessable', 'Raw wallet refs missing on transaction');
+      }
+
+      const settled = await settleTransfer({
+        reference: txn.transaction_id,
+        fromRef,
+        toRef,
+        amount: Number(txn.amount),
+        kind,
+      });
+
+      reply.code(200).send({
+        transaction_id: txn.transaction_id,
+        settled: true,
+        action,
+        amount: Number(txn.amount),
+        decision: txn.decision,
+        from: {
+          external_ref: fromRef,
+          balance: Number(settled.from.balance),
+          reserved: txn.decision === 'hold',
+        },
+        to: {
+          external_ref: toRef,
+          balance: Number(settled.to.balance),
+        },
       });
     })
   );

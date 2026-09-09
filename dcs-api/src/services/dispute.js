@@ -3,6 +3,7 @@ import { ApiError } from '../utils/errors.js';
 import { now } from '../utils/crypto.js';
 import { createWebhookEvent, deliverWebhookEvent } from './webhook.js';
 import { createAuditLog } from './audit.js';
+import { refundHeldFunds, hasReserveFor } from './ledger.js';
 
 const DISPUTE_SLA_HOURS = 48;
 
@@ -82,38 +83,52 @@ export async function resolveDispute({ disputeId, outcome, note, analystId }) {
 
   const resolvedAnalystId = await resolveOpsUser(analystId);
 
-  const updated = await prisma.dispute.update({
-    where: { dispute_id: disputeId },
-    data: { status: 'resolved', outcome, analyst_id: resolvedAnalystId, resolved_at: now() },
-  });
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.dispute.update({
+      where: { dispute_id: disputeId },
+      data: { status: 'resolved', outcome, analyst_id: resolvedAnalystId, resolved_at: now() },
+    });
 
-  await createAuditLog({
-    tenantId: dispute.hold.transaction.tenant_id,
-    entityType: 'DISPUTE',
-    entityId: disputeId,
-    action: 'resolve',
-    actor: analystId,
-  });
+    if (outcome === 'approved') {
+      const reserve = await hasReserveFor(dispute.hold.transaction.transaction_id);
+      if (reserve) {
+        await refundHeldFunds({
+          reference: dispute.hold.transaction.transaction_id,
+          toRef: dispute.hold.transaction.sender_ref,
+          amount: Number(dispute.hold.transaction.amount),
+          tx,
+        });
+      }
+    }
 
-  const event = await createWebhookEvent({
-    tenantId: dispute.hold.transaction.tenant_id,
-    eventType: 'dispute.resolved',
-    payload: {
-      event: 'dispute.resolved',
-      dispute_id: disputeId,
-      hold_id: dispute.hold_id,
-      outcome,
+    await createAuditLog({
+      tenantId: dispute.hold.transaction.tenant_id,
+      entityType: 'DISPUTE',
+      entityId: disputeId,
+      action: 'resolve',
+      actor: analystId,
+    });
+
+    const event = await createWebhookEvent({
+      tenantId: dispute.hold.transaction.tenant_id,
+      eventType: 'dispute.resolved',
+      payload: {
+        event: 'dispute.resolved',
+        dispute_id: disputeId,
+        hold_id: dispute.hold_id,
+        outcome,
+        resolved_at: updated.resolved_at,
+      },
+    });
+
+    if (event) {
+      deliverWebhookEvent(event.event_id).catch(() => {});
+    }
+
+    return {
+      dispute_id: updated.dispute_id,
+      outcome: updated.outcome,
       resolved_at: updated.resolved_at,
-    },
+    };
   });
-
-  if (event) {
-    deliverWebhookEvent(event.event_id).catch(() => {});
-  }
-
-  return {
-    dispute_id: updated.dispute_id,
-    outcome: updated.outcome,
-    resolved_at: updated.resolved_at,
-  };
 }

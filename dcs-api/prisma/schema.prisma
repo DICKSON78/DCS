@@ -46,6 +46,8 @@ model Transaction {
   tenant_id             String
   tenant_txn_ref        String
   user_external_ref     String
+  sender_ref            String?
+  recipient_ref         String?
   amount                Decimal  @db.Decimal(18, 2)
   currency              String
   channel               String
@@ -63,6 +65,31 @@ model Transaction {
 
   @@unique([tenant_id, tenant_txn_ref])
   @@index([tenant_id])
+}
+
+model LedgerAccount {
+  id          String   @id @default(uuid())
+  external_ref String  @unique
+  kind        String
+  name        String?
+  balance     Decimal  @db.Decimal(18, 2) @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+}
+
+model LedgerEntry {
+  id         String   @id @default(uuid())
+  reference  String
+  from_ref   String
+  to_ref     String
+  amount     Decimal  @db.Decimal(18, 2)
+  direction  String
+  kind       String
+  created_at DateTime @default(now())
+
+  @@index([reference])
+  @@index([from_ref])
+  @@index([to_ref])
 }
 
 model ReasonCode {

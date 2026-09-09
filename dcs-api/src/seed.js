@@ -49,11 +49,11 @@ const SENDERS = [
 ];
 
 const RECIPIENTS = [
-  { ref: '255712345678', name: 'Juma Mohamed', age: 1850, note: 'Mpokeaji anayejulikana — akaunti ya miaka 5.' },
-  { ref: '255712345679', name: 'Amina Hassan', age: 12, note: 'Akaunti changa — siku 12 tu.' },
-  { ref: '255712345680', name: 'Baraka Mwinyi', age: 3000, note: 'Mpokeaji mwenye historia ndefu.' },
-  { ref: '255713456789', name: 'Neema Joseph', age: 540, note: 'Mpokeaji wa kawaida.' },
-  { ref: '255714567890', name: 'Daudi Kileo', age: 2, note: 'Akaunti mpya kabisa — siku 2 tu, angalia!' },
+  { ref: '255712345678', name: 'Juma Mohamed', age: 1850, balance: 1500000, note: 'Mpokeaji anayejulikana — akaunti ya miaka 5.' },
+  { ref: '255712345679', name: 'Amina Hassan', age: 12, balance: 250000, note: 'Akaunti changa — siku 12 tu.' },
+  { ref: '255712345680', name: 'Baraka Mwinyi', age: 3000, balance: 3250000, note: 'Mpokeaji mwenye historia ndefu.' },
+  { ref: '255713456789', name: 'Neema Joseph', age: 540, balance: 900000, note: 'Mpokeaji wa kawaida.' },
+  { ref: '255714567890', name: 'Daudi Kileo', age: 2, balance: 5000, note: 'Akaunti mpya kabisa — siku 2 tu, angalia!' },
 ];
 
 for (const s of SENDERS) {
@@ -91,16 +91,43 @@ for (const r of RECIPIENTS) {
       registered_name: r.name,
       account_age_days: r.age,
       note: r.note,
+      balance: r.balance,
     },
     update: {
       registered_name: r.name,
       account_age_days: r.age,
       note: r.note,
+      balance: r.balance,
     },
   });
 }
 
+for (const s of SENDERS) {
+  await prisma.ledgerAccount.upsert({
+    where: { external_ref: s.ref },
+    create: { external_ref: s.ref, kind: 'sender', name: s.name, balance: s.balance },
+    update: { name: s.name, balance: s.balance },
+  });
+}
+
+for (const r of RECIPIENTS) {
+  await prisma.ledgerAccount.upsert({
+    where: { external_ref: r.ref },
+    create: { external_ref: r.ref, kind: 'recipient', name: r.name, balance: r.balance },
+    update: { name: r.name, balance: r.balance },
+  });
+}
+
+await prisma.ledgerAccount.upsert({
+  where: { external_ref: '__ESCROW__' },
+  create: { external_ref: '__ESCROW__', kind: 'escrow', name: 'Sandbox escrow (holds)', balance: 0 },
+  update: { balance: 0 },
+});
+
+await prisma.ledgerEntry.deleteMany({});
+
 console.log(`Seeded sandbox directory: ${SENDERS.length} senders, ${RECIPIENTS.length} recipients.`);
+console.log(`Seeded double-entry ledger: ${SENDERS.length + RECIPIENTS.length} accounts + escrow, 0 entries.`);
 
 const TENANT_ID = 'tenant-test-0001';
 const firstSeenAt = (ageDays) => new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000).toISOString();

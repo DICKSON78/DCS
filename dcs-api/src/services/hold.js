@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { ApiError, errorCodes } from '../utils/errors.js';
 import { now } from '../utils/crypto.js';
 import { createAuditLog } from './audit.js';
+import { releaseHeldFunds, hasReserveFor } from './ledger.js';
 
 export async function releaseHold({ holdId, tenantId, releasedBy, note }) {
   const hold = await prisma.hold.findUnique({
@@ -21,24 +22,36 @@ export async function releaseHold({ holdId, tenantId, releasedBy, note }) {
     throw new ApiError(409, 'conflict', 'Hold already released');
   }
 
-  const updated = await prisma.hold.update({
-    where: { hold_id: holdId },
-    data: { status: 'released', released_by: releasedBy, released_at: now() },
-  });
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.hold.update({
+      where: { hold_id: holdId },
+      data: { status: 'released', released_by: releasedBy, released_at: now() },
+    });
 
-  await createAuditLog({
-    tenantId,
-    entityType: 'HOLD',
-    entityId: holdId,
-    action: 'release',
-    actor: releasedBy || 'system',
-  });
+    const reserve = await hasReserveFor(hold.transaction.transaction_id);
+    if (reserve) {
+      await releaseHeldFunds({
+        reference: hold.transaction.transaction_id,
+        toRef: hold.transaction.recipient_ref,
+        amount: Number(hold.transaction.amount),
+        tx,
+      });
+    }
 
-  return {
-    hold_id: updated.hold_id,
-    status: 'released',
-    released_at: updated.released_at,
-  };
+    await createAuditLog({
+      tenantId,
+      entityType: 'HOLD',
+      entityId: holdId,
+      action: 'release',
+      actor: releasedBy || 'system',
+    });
+
+    return {
+      hold_id: updated.hold_id,
+      status: 'released',
+      released_at: updated.released_at,
+    };
+  });
 }
 
 export async function freezeHold({ holdId, actor }) {
