@@ -166,6 +166,43 @@ model CustomerBaseline {
   @@unique([tenant_id, user_external_ref])
 }
 
+model SandboxCustomer {
+  id                 String   @id @default(uuid())
+  kind               String
+  external_ref       String
+  registered_name    String
+  account_age_days   Int
+  note               String?
+  known_devices      Json?
+  typical_amount     Decimal? @db.Decimal(18, 2)
+  typical_recipients Json?
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+
+  @@unique([kind, external_ref])
+  @@index([kind, active])
+}
+
+model SandboxScenario {
+  id               String   @id @default(uuid())
+  key              String   @unique
+  tag              String
+  expected_decision String
+  title            String
+  description      String
+  flow             String
+  sender_ref       String
+  recipient_ref    String
+  amount           Decimal? @db.Decimal(18, 2)
+  device_unknown   Boolean  @default(false)
+  night            Boolean  @default(false)
+  sort_order       Int      @default(0)
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  @@index([active, sort_order])
+}
+
 model AuditLog {
   audit_id    String   @id @default(uuid())
   tenant_id   String

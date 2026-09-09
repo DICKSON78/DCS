@@ -8,6 +8,7 @@ export function registerTenantAuth(fastify) {
     if (request.url.startsWith('/docs')) return;
     if (request.url.startsWith('/v1/audit/')) return;
     if (request.url.startsWith('/v1/ops/')) return;
+    if (request.url.startsWith('/v1/sandbox/')) return;
     if (request.url.startsWith('/v1/holds/') && request.url.endsWith('/freeze')) return;
     if (request.method === 'PATCH' && request.url.startsWith('/v1/disputes/')) return;
     await authenticateTenant(request);
@@ -19,6 +20,7 @@ export function registerTenantAuth(fastify) {
     if (request.url.startsWith('/docs')) return;
     if (request.url.startsWith('/v1/audit/')) return;
     if (request.url.startsWith('/v1/ops/')) return;
+    if (request.url.startsWith('/v1/sandbox/')) return;
     if (request.url.startsWith('/v1/holds/') && request.url.endsWith('/freeze')) return;
     if (request.method === 'PATCH' && request.url.startsWith('/v1/disputes/')) return;
     if (!request.routeOptions?.url) return;
@@ -32,6 +34,7 @@ export function registerOpsAuth(fastify) {
     if (request.method === 'OPTIONS') return;
     const isOpsRoute =
       request.url.startsWith('/v1/ops/') ||
+      request.url.startsWith('/v1/sandbox/') ||
       (request.url.startsWith('/v1/holds/') && request.url.endsWith('/freeze')) ||
       (request.method === 'PATCH' && request.url.startsWith('/v1/disputes/'));
     if (isOpsRoute) {

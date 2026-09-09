@@ -14,6 +14,7 @@ import { registerWebhookRoutes } from './routes/webhooks.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerAuditRoutes } from './routes/audit.js';
 import { registerOpsRoutes } from './routes/ops.js';
+import { registerSandboxRoutes } from './routes/sandbox.js';
 import { disconnectPrisma } from './lib/prisma.js';
 import { autoReleaseExpiredHolds } from './services/hold.js';
 import { retryFailedWebhooks } from './services/webhook.js';
@@ -101,6 +102,7 @@ export async function buildServer() {
   registerWebhookRoutes(fastify);
   registerAuditRoutes(fastify);
   registerOpsRoutes(fastify);
+  registerSandboxRoutes(fastify);
 
   let autoReleaseTimer;
   let webhookRetryTimer;

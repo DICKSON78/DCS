@@ -637,11 +637,14 @@ export default function Docs() {
               </tbody>
             </table>
           </div>
-          <p>Activities that reproduce each decision:</p>
+          <p>
+            The sandbox directory is seeded per sender (behavioural baseline: typical amount,
+            devices, recipients, account age) so scenarios are deterministic:
+          </p>
           <ul>
-            <li><b>warn</b> — a large, untypical amount or a brand-new customer on day zero.</li>
-            <li><b>hold</b> — five transfers in the hour, then a sixth from a different <code>device_fingerprint</code>.</li>
-            <li><b>block</b> — a very large amount far above baseline <i>plus</i> a changed device.</li>
+            <li><b>allow</b> — <code>Baraka Mwishi</code> sends TZS 60,000 to <code>Juma Mohamed</code> from his usual device.</li>
+            <li><b>hold → refund</b> — <code>Baraka</code> sends TZS 400,000 to <code>Daudi Kileo</code> (2-day account) from an <i>unknown device</i>.</li>
+            <li><b>block</b> — <code>Juma Said</code> (day zero) sends TZS 200,000 from an <i>unknown device</i> at night.</li>
           </ul>
           <p>The ops token is <code>ops-secret-token-0001</code>. Run the full live test harness with:</p>
           <CodeBlock
@@ -660,6 +663,36 @@ export default function Docs() {
               },
             ]}
           />
+
+          <h3 style={{ marginTop: 26 }}>
+            <span className="hash">#</span>App-style demo (Simulator page)
+          </h3>
+          <p>
+            The <Link to="/simulator" className="inline">Simulator</Link> page renders a phone-app
+            “Send Money” flow, backed by a DB customer directory:
+          </p>
+          <div className="doc-table-wrap">
+            <table className="doc-table">
+              <thead>
+                <tr><th>Endpoint</th><th>Auth</th><th>Use</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>GET /v1/sandbox/customers</code></td><td>ops bearer</td><td>List sandbox senders + recipients (masked names, account age, devices, notes).</td></tr>
+                <tr><td><code>GET /v1/sandbox/scenarios</code></td><td>ops bearer</td><td>List demo scenarios (Hadithi A/B/C) built from the customer directory.</td></tr>
+                <tr><td><code>POST /v1/recipients/verify</code></td><td>tenant-signed</td><td>“Hakikisha” — confirm the registered owner’s name before money leaves.</td></tr>
+                <tr><td><code>POST /v1/transactions/validate</code></td><td>tenant-signed</td><td>Score the transfer → <code>allow · warn · hold · block</code>.</td></tr>
+                <tr><td><code>POST /v1/holds/:id/freeze</code></td><td>ops bearer</td><td>Escalate a hold to a freeze once fraud is reported.</td></tr>
+                <tr><td><code>POST /v1/disputes</code></td><td>tenant-signed</td><td>Customer complaint (wrong recipient / fraud).</td></tr>
+                <tr><td><code>PATCH /v1/disputes/:id</code></td><td>ops bearer</td><td>Resolve investigation → <code>approved</code> (refund to owner).</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>Three realistic journeys are wired up as one-tap scenarios:</p>
+          <ul>
+            <li><b>allow</b> — trusted sender → known recipient, usual device/amount. Money settles with an SMS receipt.</li>
+            <li><b>hold → refund</b> — sender uses an unknown device to a 2-day-old new recipient. Money is secured, the customer reports fraud, Ops freezes → investigates → refunds to the owner.</li>
+            <li><b>block</b> — day-zero account sending a far-above-baseline amount from an unknown device. Money never leaves the wallet.</li>
+          </ul>
         </section>
 
         <section className="doc-section" id="support">
