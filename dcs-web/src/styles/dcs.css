@@ -34,6 +34,7 @@
   --info: #38bdf8;
 
   --gradient: linear-gradient(135deg, #f6b60c 0%, #ffd766 100%);
+  --gradient-gold: linear-gradient(135deg, #f6b60c 0%, #ffd766 100%);
   --gradient-blue: linear-gradient(135deg, #1e5bdb 0%, #6ea8ff 100%);
   --gradient-brand: linear-gradient(135deg, #1e5bdb 0%, #6ea8ff 60%, #f6b60c 100%);
   --code-bg: #02040a;
