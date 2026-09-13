@@ -16,9 +16,12 @@
       "bundleIdentifier": "dev.dcs.wallet"
     },
     "extra": {
-      "apiBase": "http://10.0.2.2:8080",
+      "apiBase": "http://localhost:8080",
       "apiKey": "test-api-key-0001",
       "signingSecret": "test-signing-key-0001"
-    }
+    },
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }

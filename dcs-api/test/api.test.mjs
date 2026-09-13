@@ -336,6 +336,44 @@ test('ops rotation rotates API key and signing secret (old credentials rejected)
   }
 });
 
+test('client login by phone + PIN (bank-app style)', async () => {
+  const dir = await app.inject({
+    method: 'GET',
+    url: '/v1/client/directory',
+    headers: signed('GET', '/v1/client/directory'),
+  });
+  assert.equal(dir.statusCode, 200);
+  const phone = dir.json().senders[0].external_ref;
+  const goodPin = phone.replace(/\D/g, '').slice(-4);
+
+  const ok = await app.inject({
+    method: 'POST',
+    url: '/v1/client/login',
+    headers: signed('POST', '/v1/client/login', { phone, pin: goodPin }),
+    payload: { phone, pin: goodPin },
+  });
+  assert.equal(ok.statusCode, 200, JSON.stringify(ok.body));
+  assert.equal(ok.json().ok, true);
+  assert.equal(ok.json().account.external_ref, phone);
+  assert.ok(typeof ok.json().account.balance === 'number');
+
+  const badPin = await app.inject({
+    method: 'POST',
+    url: '/v1/client/login',
+    headers: signed('POST', '/v1/client/login', { phone, pin: '0000' }),
+    payload: { phone, pin: '0000' },
+  });
+  assert.equal(badPin.statusCode, 401, JSON.stringify(badPin.body));
+
+  const unknown = await app.inject({
+    method: 'POST',
+    url: '/v1/client/login',
+    headers: signed('POST', '/v1/client/login', { phone: '255999999999', pin: '9999' }),
+    payload: { phone: '255999999999', pin: '9999' },
+  });
+  assert.equal(unknown.statusCode, 404, JSON.stringify(unknown.body));
+});
+
 test('client directory is available to a signed tenant (no ops token)', async () => {
   const res = await app.inject({
     method: 'GET',
