@@ -13,9 +13,9 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/simulator" element={<Simulator />} />
         <Route path="/verify" element={<Verify />} />
-        <Route path="/ops" element={<Ops />} />
         <Route path="/docs" element={<Docs />} />
       </Route>
+      <Route path="/ops" element={<Ops />} />
     </Routes>
   );
 }

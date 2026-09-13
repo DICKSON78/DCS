@@ -29,6 +29,24 @@ export function registerDashboardRoutes(fastify) {
         prisma.ledgerEntry.count(),
       ]);
 
+      const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+      const since = new Date(Date.now() - 6 * 86400000);
+      const recentTxns = await prisma.transaction.findMany({
+        where: { created_at: { gte: since } },
+        select: { created_at: true, amount: true },
+      });
+      const byDay = [];
+      for (let i = 6; i >= 0; i -= 1) {
+        const date = new Date(Date.now() - i * 86400000);
+        const key = dayKey(date);
+        const rows = recentTxns.filter((t) => dayKey(t.created_at) === key);
+        byDay.push({
+          date: key,
+          count: rows.length,
+          amount: num(rows.reduce((a, t) => a + Number(t.amount), 0)),
+        });
+      }
+
       reply.code(200).send({
         totals: {
           transactions: txnCount,
@@ -39,6 +57,7 @@ export function registerDashboardRoutes(fastify) {
           ledger_entries: entryCount,
         },
         decisions: Object.fromEntries(breakdown.map((b) => [b.decision, b._count])),
+        volume_7d: byDay,
         recent: recent.map((t) => ({
           transaction_id: t.transaction_id,
           tenant_id: t.tenant_id,
