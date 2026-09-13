@@ -36,6 +36,9 @@ export default function Simulator() {
   const [error, setError] = useState(null);
   const [txnRef, setTxnRef] = useState("");
   const [txnId, setTxnId] = useState("");
+  const [phoneApp, setPhoneApp] = useState("home");
+  const [history, setHistory] = useState(null);
+  const [histLoading, setHistLoading] = useState(false);
   const freshRef = () => "SIM-" + Math.floor(Date.now() / 1000) + "-" + Math.floor(Math.random() * 900 + 100);
 
   useEffect(() => {
@@ -124,6 +127,24 @@ export default function Simulator() {
       if (res.status === 200 && res.body?.senders) setCustomers(res.body);
     } catch {
       /* keep current balances */
+    }
+  };
+
+  const loadHistory = async (ref) => {
+    if (!ref) return;
+    setHistLoading(true);
+    try {
+      const res = await dcsRequest({
+        baseUrl: creds.baseUrl,
+        method: "GET",
+        path: "/v1/ops/transactions?sender_ref=" + encodeURIComponent(ref) + "&limit=25",
+        opsToken: creds.opsToken,
+      });
+      if (res.status === 200) setHistory(res.body.transactions || []);
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistLoading(false);
     }
   };
 
@@ -471,7 +492,11 @@ export default function Simulator() {
                     </div>
                   </div>
                 ) : step === "home" ? (
-                  <WalletHome form={form} sender={sender} setForm={setForm} senders={customers.senders} next={() => setStep("recipient")} />
+                  phoneApp === "history" ? (
+                    <HistoryScreen sender={sender} history={history} histLoading={histLoading} loadHistory={loadHistory} goSend={() => { setPhoneApp("home"); setStep("recipient"); }} />
+                  ) : (
+                    <WalletHome form={form} sender={sender} setForm={setForm} senders={customers.senders} next={() => setStep("recipient")} openHistory={() => { loadHistory(sender?.external_ref); setPhoneApp("history"); }} />
+                  )
                 ) : step === "recipient" ? (
                   <PhoneBook recipients={customers.recipients} form={form} setForm={setForm} back={() => setStep("home")} next={() => setStep("amount")} />
                 ) : step === "amount" ? (
@@ -492,6 +517,17 @@ export default function Simulator() {
                   </div>
                 )}
               </div>
+
+              {step === "home" && !error && (
+                <div className="phone-nav">
+                  <button className={phoneApp === "home" ? "active" : ""} onClick={() => { setPhoneApp("home"); refreshCustomers(); }}>
+                    <i className="fa-solid fa-house" /> Nyumbani
+                  </button>
+                  <button className={phoneApp === "history" ? "active" : ""} onClick={() => { loadHistory(sender?.external_ref); setPhoneApp("history"); }}>
+                    <i className="fa-solid fa-clock-rotate-left" /> Shughuli
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -603,7 +639,7 @@ export default function Simulator() {
   );
 }
 
-function WalletHome({ form, sender, setForm, senders, next }) {
+function WalletHome({ form, sender, setForm, senders, next, openHistory }) {
   return (
     <div className="app-step">
       <div className="app-step-top">
@@ -636,15 +672,15 @@ function WalletHome({ form, sender, setForm, senders, next }) {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
-          <div className="action-tile">
-            <i className="fa-solid fa-phone-volume" />
-            <span>Lipia</span>
-            <small>pochi & beki</small>
+          <div className="action-tile" role="button" onClick={openHistory}>
+            <i className="fa-solid fa-clock-rotate-left" />
+            <span>Shughuli</span>
+            <small>historia halisi</small>
           </div>
-          <div className="action-tile">
-            <i className="fa-solid fa-down-left-and-up-right-to-center" />
-            <span>Pokea</span>
-            <small>namba yako</small>
+          <div className="action-tile" role="button" onClick={next}>
+            <i className="fa-solid fa-paper-plane" />
+            <span>Tuma</span>
+            <small>mpya</small>
           </div>
         </div>
         <p className="muted" style={{ fontSize: 11.5, margin: "8px 2px 0", lineHeight: 1.5 }}>
@@ -652,6 +688,67 @@ function WalletHome({ form, sender, setForm, senders, next }) {
         </p>
         <button className="phone-btn phone-btn-gold" style={{ marginTop: 14 }} onClick={next}>
           <i className="fa-solid fa-paper-plane" /> Tuma pesa
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HistoryScreen({ sender, history, histLoading, loadHistory, goSend }) {
+  return (
+    <div className="app-step">
+      <div className="app-step-top">
+        <span className="app-step-n done">2</span>
+        <div>
+          <div className="app-step-title">Shughuli</div>
+          <div className="app-step-en">real transfers for {sender?.external_ref}</div>
+        </div>
+      </div>
+      <div className="app-step-body">
+        <div className="wallet-hero" style={{ marginBottom: 12 }}>
+          <div className="w-row">
+            <span className="w-ico"><i className="fa-solid fa-wallet" /></span>
+            <span className="w-meta"><span className="w-label">Salio sasa</span><span className="w-name">{sender?.registered_name}</span></span>
+            <span className="w-ccy">TZS</span>
+          </div>
+          <div className="w-balance">{nf(sender?.balance ?? 0)}</div>
+        </div>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button className="btn btn-sm" onClick={() => loadHistory(sender?.external_ref)} disabled={histLoading}>
+            {histLoading ? <span className="spinner" /> : <i className="fa-solid fa-rotate" />}
+          </button>
+        </div>
+        {histLoading && !history ? (
+          <p className="muted" style={{ fontSize: 12, padding: "10px 0" }}><span className="spinner" /> Inachota historia...</p>
+        ) : !history?.length ? (
+          <p className="muted" style={{ fontSize: 12, padding: "10px 0" }}>Hakuna transfers bado.</p>
+        ) : (
+          <ul style={{ display: "grid", gap: 8 }}>
+            {history.map((h) => (
+              <li key={h.transaction_id} style={{ border: "1px solid #1e293b", borderRadius: 10, padding: "9px 11px", background: "#0b1220" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700 }}>{h.recipient_ref || h.recipient_external_ref}</span>
+                  <DecisionBadge decision={h.decision} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                  <span className="mono" style={{ fontSize: 12.5 }}>{h.amount.toLocaleString("en-TZ")} TZS</span>
+                  <span className="mono muted" style={{ fontSize: 10.5 }}>
+                    {new Date(h.created_at).toLocaleString("en-TZ", { dateStyle: "short", timeStyle: "short" })} · {h.hold_status || "nafasi"}
+                  </span>
+                </div>
+                {(h.reason_codes || []).length > 0 && (
+                  <div style={{ marginTop: 4 }}>
+                    {h.reason_codes.map((c) => (
+                      <span key={c} className="chip chip-warning" style={{ fontSize: 9, margin: "3px 4px 0 0" }}>{c}</span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <button className="phone-btn phone-btn-gold" style={{ marginTop: 14 }} onClick={goSend}>
+          <i className="fa-solid fa-paper-plane" /> Tuma pesa mpya
         </button>
       </div>
     </div>

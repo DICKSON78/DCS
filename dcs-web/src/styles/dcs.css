@@ -867,6 +867,16 @@ table.doc-table { width: 100%; border-collapse: collapse; font-size: 14px; min-w
 .phone-body::-webkit-scrollbar { width: 6px; }
 .phone-body::-webkit-scrollbar-thumb { background: #1c2634; border-radius: 10px; }
 
+.phone-nav { display: flex; border-top: 1px solid #141d2b; background: rgba(10, 16, 27, 0.9); }
+.phone-nav button {
+  flex: 1; padding: 9px 0 10px; border: none; background: none;
+  color: #64748b; font-size: 12px; font-weight: 600;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer; font-family: inherit;
+}
+.phone-nav button i { font-size: 14px; }
+.phone-nav button.active { color: var(--gold); background: rgba(246, 182, 12, 0.08); }
+
 .app-step { border: 1px solid #16202e; border-radius: 14px; background: rgba(13, 20, 33, 0.7); }
 .app-step-top { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
 .app-step-n { width: 24px; height: 24px; border-radius: 7px; background: rgba(59, 130, 246, 0.15); color: var(--blue-2); font-size: 12px; font-weight: 800; display: grid; place-items: center; font-family: var(--mono);}
