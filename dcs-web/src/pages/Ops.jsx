@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { dcsRequest } from "../lib/api.js";
 import { useCredentials } from "../lib/credentials.jsx";
 import "../styles/ops.css";
@@ -102,6 +102,10 @@ function useOpsData(creds, path) {
     } catch (e) { setError(e.message || String(e)); }
     finally { setLoading(false); }
   };
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creds.baseUrl, creds.opsToken, path]);
   return { data, loading, error, reload: load };
 }
 
