@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { asyncHandler } from '../utils/async-handler.js';
 import { ApiError } from '../utils/errors.js';
-import { releaseHold, freezeHold } from '../services/hold.js';
+import { releaseHold, freezeHold, cancelHold } from '../services/hold.js';
 
 const ReleaseSchema = z.object({
   released_by: z.string().optional().default('system'),
@@ -32,6 +32,17 @@ export function registerHoldRoutes(fastify) {
     '/v1/holds/:id/freeze',
     asyncHandler(async (request, reply) => {
       const result = await freezeHold({
+        holdId: request.params.id,
+        actor: 'ops',
+      });
+      reply.code(200).send(result);
+    })
+  );
+
+  fastify.delete(
+    '/v1/holds/:id',
+    asyncHandler(async (request, reply) => {
+      const result = await cancelHold({
         holdId: request.params.id,
         actor: 'ops',
       });

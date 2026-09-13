@@ -9,8 +9,9 @@ export function registerTenantAuth(fastify) {
     if (request.url.startsWith('/v1/audit/')) return;
     if (request.url.startsWith('/v1/ops/')) return;
     if (request.url.startsWith('/v1/sandbox/')) return;
-    if (request.url.startsWith('/v1/holds/') && request.url.endsWith('/freeze')) return;
+    if (request.url.startsWith('/v1/holds/') && (request.url.endsWith('/freeze') || request.method === 'DELETE')) return;
     if (request.method === 'PATCH' && request.url.startsWith('/v1/disputes/')) return;
+    if (request.method === 'DELETE' && request.url.startsWith('/v1/disputes/')) return;
     await authenticateTenant(request);
   });
 
@@ -21,8 +22,9 @@ export function registerTenantAuth(fastify) {
     if (request.url.startsWith('/v1/audit/')) return;
     if (request.url.startsWith('/v1/ops/')) return;
     if (request.url.startsWith('/v1/sandbox/')) return;
-    if (request.url.startsWith('/v1/holds/') && request.url.endsWith('/freeze')) return;
+    if (request.url.startsWith('/v1/holds/') && (request.url.endsWith('/freeze') || request.method === 'DELETE')) return;
     if (request.method === 'PATCH' && request.url.startsWith('/v1/disputes/')) return;
+    if (request.method === 'DELETE' && request.url.startsWith('/v1/disputes/')) return;
     if (!request.routeOptions?.url) return;
     await verifyRequestSignature(request);
   });
@@ -35,8 +37,9 @@ export function registerOpsAuth(fastify) {
     const isOpsRoute =
       request.url.startsWith('/v1/ops/') ||
       request.url.startsWith('/v1/sandbox/') ||
-      (request.url.startsWith('/v1/holds/') && request.url.endsWith('/freeze')) ||
-      (request.method === 'PATCH' && request.url.startsWith('/v1/disputes/'));
+      (request.url.startsWith('/v1/holds/') && (request.url.endsWith('/freeze') || request.method === 'DELETE')) ||
+      (request.method === 'PATCH' && request.url.startsWith('/v1/disputes/')) ||
+      (request.method === 'DELETE' && request.url.startsWith('/v1/disputes/'));
     if (isOpsRoute) {
       await requireOpsUser(request);
     }

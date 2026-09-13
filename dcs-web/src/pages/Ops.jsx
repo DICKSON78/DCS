@@ -16,6 +16,9 @@ const NAV = [
     { id: "ledger", label: "Ledger", icon: "fa-book" },
     { id: "audit", label: "Audit chain", icon: "fa-link" },
   ]},
+  { group: "Sandbox", items: [
+    { id: "directory", label: "Directory", icon: "fa-address-book" },
+  ]},
 ];
 
 const nf = new Intl.NumberFormat("en-TZ");
@@ -80,6 +83,7 @@ export default function Ops() {
         {tab === "disputes" && <Disputes creds={creds} />}
         {tab === "ledger" && <Ledger creds={creds} />}
         {tab === "audit" && <Audit creds={creds} />}
+        {tab === "directory" && <Directory creds={creds} />}
       </main>
     </div>
   );
@@ -257,6 +261,7 @@ function Holds({ creds }) {
     setBusy(h.hold_id + ":" + kind);
     try {
       if (kind === "freeze") await opRequest(creds, "POST", "/v1/holds/" + h.hold_id + "/freeze");
+      else if (kind === "cancel") await opRequest(creds, "DELETE", "/v1/holds/" + h.hold_id);
       else await dcsRequest({ baseUrl: creds.baseUrl, method: "POST", path: "/v1/holds/" + h.hold_id + "/release", payload: { released_by: "ops-console", note: "Admin panel" }, apiKey: creds.apiKey, signingSecret: creds.signingSecret });
       await reload();
     } catch (e) { alert(e.message || String(e)); }
@@ -287,6 +292,7 @@ function Holds({ creds }) {
                     <div className="ops-acts">
                       <button className="ops-btn ghost" disabled={!!busy} onClick={() => act(h, "freeze")}><i className="fa-solid fa-lock" />Freeze</button>
                       <button className="ops-btn" disabled={!!busy} onClick={() => act(h, "release")}><i className="fa-solid fa-check" />Release</button>
+                      <button className="ops-btn danger" disabled={!!busy} onClick={() => act(h, "cancel")}><i className="fa-solid fa-ban" />Cancel</button>
                     </div>
                   )}
                 </td>
@@ -307,6 +313,14 @@ function Disputes({ creds }) {
     setBusy(d.dispute_id + ":" + outcome);
     try {
       await opRequest(creds, "PATCH", "/v1/disputes/" + d.dispute_id, { outcome, note: outcome === "approved" ? "Fraud confirmed — refund the sender." : "No evidence of fraud." });
+      await reload();
+    } catch (e) { alert(e.message || String(e)); }
+    finally { setBusy(""); }
+  }
+  async function withdraw(d) {
+    setBusy(d.dispute_id + ":withdraw");
+    try {
+      await opRequest(creds, "DELETE", "/v1/disputes/" + d.dispute_id);
       await reload();
     } catch (e) { alert(e.message || String(e)); }
     finally { setBusy(""); }
@@ -335,6 +349,7 @@ function Disputes({ creds }) {
                     <div className="ops-acts">
                       <button className="ops-btn" disabled={!!busy} onClick={() => resolve(d, "approved")}><i className="fa-solid fa-rotate-left" />Refund</button>
                       <button className="ops-btn ghost" disabled={!!busy} onClick={() => resolve(d, "rejected")}><i className="fa-solid fa-xmark" />Reject</button>
+                      <button className="ops-btn danger" disabled={!!busy} onClick={() => withdraw(d)}><i className="fa-solid fa-arrow-right-from-bracket" />Withdraw</button>
                     </div>
                   )}
                 </td>
@@ -401,7 +416,222 @@ function Ledger({ creds }) {
   );
 }
 
-/* ---------------- AUDIT ---------------- */
+/* ---------------- DIRECTORY ---------------- */
+function Directory({ creds }) {
+  const cust = useOpsData(creds, "/v1/sandbox/customers");
+  const scen = useOpsData(creds, "/v1/sandbox/scenarios");
+  const [editC, setEditC] = useState(null);
+  const [editS, setEditS] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function saveCustomer(p) {
+    setSaving(true);
+    try {
+      if (editC) {
+        const { kind, ...rest } = p;
+        const res = await opRequest(creds, "PATCH", "/v1/sandbox/customers/" + editC.external_ref, rest);
+        if (res.status !== 200) throw new Error(res.body?.message || "HTTP " + res.status);
+      } else {
+        const res = await opRequest(creds, "POST", "/v1/sandbox/customers", p);
+        if (res.status !== 201) throw new Error(res.body?.message || "HTTP " + res.status);
+      }
+      setEditC(null); await cust.reload();
+    } catch (e) { alert(e.message || String(e)); }
+    finally { setSaving(false); }
+  }
+  async function delCustomer(c) {
+    if (!confirm("Delete " + c.external_ref + "? Blocked unless its ledger balance is zero.")) return;
+    const res = await opRequest(creds, "DELETE", "/v1/sandbox/customers/" + c.external_ref);
+    if (res.status !== 200) { alert(res.body?.message || "HTTP " + res.status); return; }
+    await cust.reload();
+  }
+  async function saveScenario(p) {
+    setSaving(true);
+    try {
+      if (editS) {
+        const res = await opRequest(creds, "PATCH", "/v1/sandbox/scenarios/" + editS.key, p);
+        if (res.status !== 200) throw new Error(res.body?.message || "HTTP " + res.status);
+      } else {
+        const res = await opRequest(creds, "POST", "/v1/sandbox/scenarios", p);
+        if (res.status !== 201) throw new Error(res.body?.message || "HTTP " + res.status);
+      }
+      setEditS(null); await scen.reload();
+    } catch (e) { alert(e.message || String(e)); }
+    finally { setSaving(false); }
+  }
+  async function delScenario(s) {
+    if (!confirm("Delete scenario " + s.key + "?")) return;
+    const res = await opRequest(creds, "DELETE", "/v1/sandbox/scenarios/" + s.key);
+    if (res.status !== 200) { alert(res.body?.message || "HTTP " + res.status); return; }
+    await scen.reload();
+  }
+
+  const customers = [
+    ...(cust.data?.senders || []),
+    ...(cust.data?.recipients || []),
+  ];
+
+  return (
+    <>
+      <div className="ops-panel">
+        <div className="ops-panel-head">
+          <div><h3>Customer directory</h3><p className="sub">Sandbox senders &amp; recipients — create, edit or delete (creates/deletes the matching ledger account)</p></div>
+          {!editC && <button className="ops-btn" onClick={() => setEditC({})}><i className="fa-solid fa-plus" />New customer</button>}
+        </div>
+        {editC && <CustomerForm initial={editC.external_ref ? editC : null} saving={saving} onSave={saveCustomer} onCancel={() => setEditC(null)} />}
+        <State loading={cust.loading} error={cust.error} />
+        {cust.data && !cust.loading && !cust.error && (
+          <table className="ops-table">
+            <thead><tr><th>Ref</th><th>Name</th><th>Kind</th><th>Age</th><th>Balance (TZS)</th><th>Action</th></tr></thead>
+            <tbody>
+              {customers.map((c) => (
+                <tr key={c.external_ref}>
+                  <td className="ops-mono">{c.external_ref}</td>
+                  <td className="ops-who">{c.registered_name}<div className="ops-sub">{c.display_name || "—"}</div></td>
+                  <td><span className={"ops-badge " + (c.kind === "sender" ? "ok" : c.kind === "recipient" ? "ghost" : "")}>{c.kind}</span></td>
+                  <td className="ops-mono">{c.account_age_days}d</td>
+                  <td><b className="ops-mono">{nf.format(c.balance)}</b></td>
+                  <td>
+                    <div className="ops-acts">
+                      <button className="ops-btn ghost" onClick={() => setEditC(c)}><i className="fa-solid fa-pen" />Edit</button>
+                      <button className="ops-btn danger" onClick={() => delCustomer(c)}><i className="fa-solid fa-trash" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="ops-panel">
+        <div className="ops-panel-head">
+          <div><h3>Demo scenarios</h3><p className="sub">Presets shown in the simulator — expected decision, flow, parties, amount</p></div>
+          {!editS && <button className="ops-btn" onClick={() => setEditS({})}><i className="fa-solid fa-plus" />New scenario</button>}
+        </div>
+        {editS && <ScenarioForm initial={editS.key ? editS : null} saving={saving} onSave={saveScenario} onCancel={() => setEditS(null)} />}
+        <State loading={scen.loading} error={scen.error} />
+        {scen.data && !scen.loading && !scen.error && (
+          <table className="ops-table">
+            <thead><tr><th>Key</th><th>Title</th><th>Expected</th><th>Flow</th><th>Parties</th><th>Amount</th><th>Action</th></tr></thead>
+            <tbody>
+              {(scen.data.scenarios || []).map((s) => (
+                <tr key={s.key}>
+                  <td className="ops-mono">{s.key}</td>
+                  <td className="ops-who">{s.title}<div className="ops-sub">{s.tag}</div></td>
+                  <td><span className={"ops-badge " + (s.expected_decision === "allow" ? "ok" : s.expected_decision === "block" ? "warn" : "ghost")}>{s.expected_decision}</span></td>
+                  <td className="ops-mono">{s.flow}</td>
+                  <td className="ops-mono">{s.preset?.sender} → {s.preset?.recipient}</td>
+                  <td className="ops-amt">{s.preset?.amount != null ? nf.format(s.preset.amount) : "—"}</td>
+                  <td>
+                    <div className="ops-acts">
+                      <button className="ops-btn ghost" onClick={() => setEditS(s)}><i className="fa-solid fa-pen" />Edit</button>
+                      <button className="ops-btn danger" onClick={() => delScenario(s)}><i className="fa-solid fa-trash" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  );
+}
+
+function Field({ label, children }) {
+  return <label className="ops-field"><span>{label}</span>{children}</label>;
+}
+
+function CustomerForm({ initial, saving, onSave, onCancel }) {
+  const [f, setF] = useState({
+    kind: initial?.kind || "sender",
+    external_ref: initial?.external_ref || "",
+    registered_name: initial?.registered_name || "",
+    account_age_days: initial?.account_age_days ?? 180,
+    balance: initial?.balance ?? 0,
+  });
+  const set = (k) => (e) => {
+    const v = e.target.type === "number" ? Number(e.target.value) : e.target.value;
+    setF({ ...f, [k]: v });
+  };
+  return (
+    <div className="ops-form">
+      <div className="ops-form-row">
+        {initial && (
+          <Field label="Kind"><input className="ops-select" value={f.kind} disabled /></Field>
+        )}
+        {!initial && (
+          <Field label="Kind">
+            <select className="ops-select" value={f.kind} onChange={set("kind")}>
+              <option value="sender">sender</option><option value="recipient">recipient</option>
+            </select>
+          </Field>
+        )}
+        <Field label="External ref"><input className="ops-select" placeholder="2557…" value={f.external_ref} onChange={set("external_ref")} disabled={!!initial} /></Field>
+        <Field label="Registered name"><input className="ops-select" value={f.registered_name} onChange={set("registered_name")} /></Field>
+        <Field label="Account age (days)"><input className="ops-select" type="number" min={0} value={f.account_age_days} onChange={set("account_age_days")} /></Field>
+        <Field label="Opening balance (TZS)"><input className="ops-select" type="number" min={0} value={f.balance} onChange={set("balance")} /></Field>
+      </div>
+      <div className="ops-form-acts">
+        <button className="ops-btn" disabled={saving} onClick={() => onSave(f)}>{saving ? <span className="ops-spin" /> : <i className="fa-solid fa-check" />}{initial ? "Save changes" : "Create customer"}</button>
+        <button className="ops-btn ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function ScenarioForm({ initial, saving, onSave, onCancel }) {
+  const [f, setF] = useState({
+    key: initial?.key || "",
+    tag: initial?.tag || "",
+    expected_decision: initial?.expected_decision || "warn",
+    title: initial?.title || "",
+    description: initial?.description || "",
+    flow: initial?.flow || "p2p",
+    sender_ref: initial?.preset?.sender || initial?.sender_ref || "",
+    recipient_ref: initial?.preset?.recipient || initial?.recipient_ref || "",
+    amount: initial?.preset?.amount ?? initial?.amount ?? 10000,
+  });
+  const set = (k) => (e) => {
+    const v = e.target.type === "number" ? Number(e.target.value) : e.target.value;
+    setF({ ...f, [k]: v });
+  };
+  const submit = () => {
+    const p = { ...f };
+    if (!p.description) delete p.description;
+    if (!p.amount) delete p.amount;
+    onSave(p);
+  };
+  return (
+    <div className="ops-form">
+      <div className="ops-form-row">
+        <Field label="Key"><input className="ops-select" value={f.key} onChange={set("key")} disabled={!!initial} placeholder="high-amount-first-transfer" /></Field>
+        <Field label="Tag"><input className="ops-select" value={f.tag} onChange={set("tag")} placeholder="NEW" /></Field>
+        <Field label="Expected decision">
+          <select className="ops-select" value={f.expected_decision} onChange={set("expected_decision")}>
+            <option value="allow">allow</option><option value="warn">warn</option>
+            <option value="hold">hold</option><option value="block">block</option>
+          </select>
+        </Field>
+        <Field label="Title"><input className="ops-select" value={f.title} onChange={set("title")} /></Field>
+        <Field label="Description"><input className="ops-select" value={f.description} onChange={set("description")} /></Field>
+        <Field label="Flow">
+          <select className="ops-select" value={f.flow} onChange={set("flow")}>
+            <option value="p2p">p2p</option><option value="bank">bank</option><option value="ussd">ussd</option>
+          </select>
+        </Field>
+        <Field label="Sender ref"><input className="ops-select" value={f.sender_ref} onChange={set("sender_ref")} /></Field>
+        <Field label="Recipient ref"><input className="ops-select" value={f.recipient_ref} onChange={set("recipient_ref")} /></Field>
+        <Field label="Amount (TZS)"><input className="ops-select" type="number" min={0} value={f.amount} onChange={set("amount")} /></Field>
+      </div>
+      <div className="ops-form-acts">
+        <button className="ops-btn" disabled={saving} onClick={submit}>{saving ? <span className="ops-spin" /> : <i className="fa-solid fa-check" />}{initial ? "Save changes" : "Create scenario"}</button>
+        <button className="ops-btn ghost" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 function Audit({ creds }) {
   const [tenantId, setTenantId] = useState("tenant-test-0001");
   const [loading, setLoading] = useState(false);

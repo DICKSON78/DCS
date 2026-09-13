@@ -335,3 +335,135 @@ test('ops rotation rotates API key and signing secret (old credentials rejected)
     await prisma.tenant.deleteMany({ where: { tenant_id: rotTenant } });
   }
 });
+
+test('ops directory CRUD: sandbox customers and scenarios', async () => {
+  const ops = { authorization: `Bearer ${process.env.OPS_BEARER_TOKEN}` };
+  const withJson = (h) => ({ ...h, 'content-type': 'application/json' });
+  const ref = '255CRUD' + Date.now().toString().slice(-6);
+
+  let res = await app.inject({
+    method: 'POST',
+    url: '/v1/sandbox/customers',
+    headers: withJson(ops),
+    payload: { kind: 'recipient', external_ref: ref, registered_name: 'CRUD Test Ltd', account_age_days: 30, balance: 10000 },
+  });
+  assert.equal(res.statusCode, 201, JSON.stringify(res.body));
+
+  res = await app.inject({ method: 'GET', url: '/v1/sandbox/customers', headers: ops });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.json().recipients.some((c) => c.external_ref === ref), 'created customer must appear in list');
+
+  res = await app.inject({
+    method: 'PATCH',
+    url: `/v1/sandbox/customers/${ref}`,
+    headers: withJson(ops),
+    payload: { balance: 25000, account_age_days: 60 },
+  });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.equal(res.json().balance, 25000);
+
+  res = await app.inject({ method: 'DELETE', url: `/v1/sandbox/customers/${ref}`, headers: ops });
+  assert.equal(res.statusCode, 409, 'delete must be blocked while ledger balance is non-zero');
+
+  await app.inject({ method: 'PATCH', url: `/v1/sandbox/customers/${ref}`, headers: withJson(ops), payload: { balance: 0 } });
+  res = await app.inject({ method: 'DELETE', url: `/v1/sandbox/customers/${ref}`, headers: ops });
+  assert.equal(res.statusCode, 200);
+
+  res = await app.inject({ method: 'GET', url: '/v1/sandbox/customers', headers: ops });
+  assert.ok(!res.json().recipients.some((c) => c.external_ref === ref), 'deleted customer must be gone');
+
+  const scKey = 'crud-scenario-' + Date.now();
+  res = await app.inject({
+    method: 'POST',
+    url: '/v1/sandbox/scenarios',
+    headers: withJson(ops),
+    payload: { key: scKey, tag: 'CRUD', expected_decision: 'warn', title: 'CRUD e2e', description: 't', flow: 'p2p', sender_ref: '2557000999', recipient_ref: '255712345678', amount: 9000 },
+  });
+  assert.equal(res.statusCode, 201, JSON.stringify(res.body));
+
+  res = await app.inject({
+    method: 'PATCH',
+    url: `/v1/sandbox/scenarios/${scKey}`,
+    headers: withJson(ops),
+    payload: { expected_decision: 'allow' },
+  });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+
+  res = await app.inject({ method: 'DELETE', url: `/v1/sandbox/scenarios/${scKey}`, headers: ops });
+  assert.equal(res.statusCode, 200);
+  res = await app.inject({ method: 'DELETE', url: `/v1/sandbox/scenarios/${scKey}`, headers: ops });
+  assert.equal(res.statusCode, 404);
+});
+
+test('ops hold cancel returns escrow to sender; dispute withdraw closes open dispute', async () => {
+  const ops = { authorization: `Bearer ${process.env.OPS_BEARER_TOKEN}` };
+  const ledger = await import('../src/services/ledger.js');
+  const ref = 'CRUDHLD' + Date.now();
+
+  await prisma.ledgerAccount.upsert({
+    where: { external_ref: '2557000999' },
+    create: { external_ref: '2557000999', kind: 'sender', name: 'Hold Sender', balance: 80000 },
+    update: { balance: 80000 },
+  });
+  await prisma.ledgerAccount.upsert({
+    where: { external_ref: '__ESCROW__' },
+    create: { external_ref: '__ESCROW__', kind: 'special', name: 'Escrow', balance: 20000 },
+    update: { balance: 20000 },
+  });
+
+  const txn = await prisma.transaction.create({
+    data: {
+      transaction_id: ref, tenant_id: tenantId, tenant_txn_ref: ref,
+      sender_ref: '2557000999', recipient_ref: '255712345678',
+      user_external_ref: '2557000999', amount: 20000, currency: 'TZS', channel: 'bank',
+      recipient_external_ref: '255712345678', occurred_at: new Date(),
+      decision: 'hold', risk_score: 70,
+    },
+  });
+  const hold = await prisma.hold.create({
+    data: { hold_id: 'h-' + Date.now(), transaction_id: ref, ttl_seconds: 1800, status: 'active' },
+  });
+  await prisma.ledgerEntry.createMany({
+    data: [
+      { reference: ref, from_ref: '2557000999', to_ref: '__ESCROW__', amount: 20000, direction: 'debit', kind: 'hold_reserve' },
+      { reference: ref, from_ref: '2557000999', to_ref: '__ESCROW__', amount: 20000, direction: 'credit', kind: 'hold_reserve' },
+    ],
+  });
+
+  let res = await app.inject({ method: 'DELETE', url: `/v1/holds/${hold.hold_id}`, headers: ops });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.equal(res.json().status, 'cancelled', JSON.stringify(res.body));
+  const senderAfter = await prisma.ledgerAccount.findUnique({ where: { external_ref: '2557000999' } });
+  assert.equal(Number(senderAfter.balance), 100000, 'cancelled hold must restore escrow to sender');
+  const escrow = await prisma.ledgerAccount.findUnique({ where: { external_ref: '__ESCROW__' } });
+  assert.equal(Number(escrow.balance), 0, 'escrow must be emptied after cancel');
+
+  const ref2 = ref + 'b';
+  await prisma.transaction.create({
+    data: {
+      transaction_id: ref2, tenant_id: tenantId, tenant_txn_ref: ref2,
+      sender_ref: '2557000999', recipient_ref: '255712345678',
+      user_external_ref: '2557000999', amount: 15000, currency: 'TZS', channel: 'bank',
+      recipient_external_ref: '255712345678', occurred_at: new Date(),
+      decision: 'hold', risk_score: 70,
+    },
+  });
+  const hold2 = await prisma.hold.create({
+    data: { hold_id: 'h-' + Date.now() + 9, transaction_id: ref2, ttl_seconds: 1800, status: 'active' },
+  });
+  const dispute = await prisma.dispute.create({
+    data: { dispute_id: 'd-' + Date.now(), hold_id: hold2.hold_id, reason: 'e2e withdraw', status: 'open', sla_due_at: new Date(Date.now() + 86400000) },
+  });
+
+  res = await app.inject({ method: 'DELETE', url: `/v1/disputes/${dispute.dispute_id}`, headers: ops });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.equal(res.json().status, 'withdrawn', JSON.stringify(res.body));
+  const after = await prisma.dispute.findUnique({ where: { dispute_id: dispute.dispute_id } });
+  assert.equal(after.status, 'withdrawn');
+
+  await prisma.dispute.deleteMany({ where: { dispute_id: { in: [dispute.dispute_id] } } });
+  await prisma.hold.deleteMany({ where: { hold_id: { in: [hold.hold_id, hold2.hold_id] } } });
+  await prisma.ledgerEntry.deleteMany({ where: { reference: { in: [ref, ref2] } } });
+  await prisma.ledgerAccount.deleteMany({ where: { external_ref: { in: ['2557000999', '__ESCROW__'] } } });
+  assert.ok(true);
+});

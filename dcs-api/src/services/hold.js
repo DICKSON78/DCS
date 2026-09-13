@@ -87,6 +87,52 @@ export async function freezeHold({ holdId, actor }) {
   };
 }
 
+export async function cancelHold({ holdId, actor }) {
+  const hold = await prisma.hold.findUnique({
+    where: { hold_id: holdId },
+    include: { transaction: true },
+  });
+
+  if (!hold) {
+    throw new ApiError(404, 'not_found', 'Hold not found');
+  }
+
+  if (hold.status !== 'active') {
+    throw new ApiError(409, 'conflict', 'Only an active hold can be cancelled');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.hold.update({
+      where: { hold_id: holdId },
+      data: { status: 'cancelled', released_at: now(), released_by: actor },
+    });
+
+    const reserve = await hasReserveFor(hold.transaction.transaction_id);
+    if (reserve) {
+      await releaseHeldFunds({
+        reference: hold.transaction.transaction_id,
+        toRef: hold.transaction.sender_ref,
+        amount: Number(hold.transaction.amount),
+        tx,
+      });
+    }
+
+    await createAuditLog({
+      tenantId: hold.transaction.tenant_id,
+      entityType: 'HOLD',
+      entityId: holdId,
+      action: 'cancel',
+      actor,
+    });
+
+    return {
+      hold_id: updated.hold_id,
+      status: 'cancelled',
+      released_at: updated.released_at,
+    };
+  });
+}
+
 export async function autoReleaseExpiredHolds() {
   const expired = await prisma.hold.findMany({
     where: {

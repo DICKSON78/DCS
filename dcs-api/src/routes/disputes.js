@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { asyncHandler } from '../utils/async-handler.js';
 import { ApiError } from '../utils/errors.js';
-import { fileDispute, resolveDispute } from '../services/dispute.js';
+import { fileDispute, resolveDispute, withdrawDispute } from '../services/dispute.js';
 
 const FileDisputeSchema = z.object({
   hold_id: z.string().min(1),
@@ -44,6 +44,17 @@ export function registerDisputeRoutes(fastify) {
         outcome: parsed.data.outcome,
         note: parsed.data.note,
         analystId: 'ops',
+      });
+      reply.code(200).send(result);
+    })
+  );
+
+  fastify.delete(
+    '/v1/disputes/:id',
+    asyncHandler(async (request, reply) => {
+      const result = await withdrawDispute({
+        disputeId: request.params.id,
+        actor: 'ops',
       });
       reply.code(200).send(result);
     })

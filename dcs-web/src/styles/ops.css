@@ -175,3 +175,11 @@
   .ops-sidebar { display: none; }
   .ops-table { display: block; overflow-x: auto; white-space: nowrap; }
 }
+/* ---- Directory CRUD forms ---- */
+.ops-form { border-top: 1px solid #191919; padding: 16px 0 4px; }
+.ops-form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.ops-field { display: flex; flex-direction: column; gap: 5px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8C8C8C; }
+.ops-field .ops-select { color: #fff; background: #0A0A0A; border: 1px solid #232323; border-radius: 8px; padding: 8px 10px; font-size: 13px; min-width: 160px; }
+.ops-field .ops-select:focus { outline: none; border-color: #FFB900; }
+.ops-form-acts { display: flex; gap: 8px; margin-top: 14px; }
+.ops-form-acts .ops-btn { display: inline-flex; align-items: center; gap: 6px; }

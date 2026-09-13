@@ -63,6 +63,38 @@ export async function fileDispute({ holdId, tenantId, reason, evidenceUrl }) {
   };
 }
 
+export async function withdrawDispute({ disputeId, actor }) {
+  const dispute = await prisma.dispute.findUnique({
+    where: { dispute_id: disputeId },
+    include: { hold: { include: { transaction: true } } },
+  });
+
+  if (!dispute) {
+    throw new ApiError(404, 'not_found', 'Dispute not found');
+  }
+
+  if (dispute.status !== 'open') {
+    throw new ApiError(409, 'conflict', 'Only an open dispute can be withdrawn');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.dispute.update({
+      where: { dispute_id: disputeId },
+      data: { status: 'withdrawn', analyst_id: 'ops', resolved_at: now() },
+    });
+
+    await createAuditLog({
+      tenantId: dispute.hold.transaction.tenant_id,
+      entityType: 'DISPUTE',
+      entityId: disputeId,
+      action: 'withdraw',
+      actor,
+    });
+
+    return { dispute_id: updated.dispute_id, status: 'withdrawn' };
+  });
+}
+
 export async function resolveDispute({ disputeId, outcome, note, analystId }) {
   const dispute = await prisma.dispute.findUnique({
     where: { dispute_id: disputeId },

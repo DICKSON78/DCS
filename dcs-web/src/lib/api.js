@@ -51,8 +51,12 @@ export async function dcsRequest({ baseUrl, method, path, payload, apiKey, signi
     headers["authorization"] = `Bearer ${opsToken}`;
   } else {
     const sig = await sign(method, path, payload, signingSecret);
+    if (sig["content-type"]) delete sig["content-type"];
     Object.assign(headers, sig);
     headers["x-tenant-key"] = apiKey;
+  }
+  if (payload) {
+    headers["content-type"] = "application/json";
   }
 
   const res = await fetch(baseUrl + path, {
