@@ -84,6 +84,13 @@ export default function Simulator() {
     })();
   }, [creds]);
 
+  useEffect(() => {
+    if (step === "home" && phoneApp === "home" && form?.sender) {
+      loadHistory(form.sender);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, phoneApp, form?.sender]);
+
   const sender = useMemo(
     () => customers?.senders.find((s) => s.external_ref === form?.sender),
     [customers, form?.sender]
@@ -495,7 +502,7 @@ export default function Simulator() {
                   phoneApp === "history" ? (
                     <HistoryScreen sender={sender} history={history} histLoading={histLoading} loadHistory={loadHistory} goSend={() => { setPhoneApp("home"); setStep("recipient"); }} />
                   ) : (
-                    <WalletHome form={form} sender={sender} setForm={setForm} senders={customers.senders} next={() => setStep("recipient")} openHistory={() => { loadHistory(sender?.external_ref); setPhoneApp("history"); }} />
+                    <WalletHome form={form} sender={sender} setForm={setForm} senders={customers.senders} next={() => setStep("recipient")} openHistory={() => { loadHistory(sender?.external_ref); setPhoneApp("history"); }} history={history} loadHistory={loadHistory} />
                   )
                 ) : step === "recipient" ? (
                   <PhoneBook recipients={customers.recipients} form={form} setForm={setForm} back={() => setStep("home")} next={() => setStep("amount")} />
@@ -639,57 +646,100 @@ export default function Simulator() {
   );
 }
 
-function WalletHome({ form, sender, setForm, senders, next, openHistory }) {
+function WalletHome({ form, sender, setForm, senders, next, openHistory, history, loadHistory }) {
+  const firstName = (sender?.registered_name || "").split(" ")[0];
+  const initials = (sender?.registered_name || "")
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("");
+
   return (
     <div className="app-step">
-      <div className="app-step-top">
-        <span className="app-step-n done">1</span>
-        <div>
-          <div className="app-step-title">Pochi yako</div>
-          <div className="app-step-en">wallet — real balance from the sandbox DB</div>
-        </div>
-      </div>
-      <div className="app-step-body">
-        <select className="phone-select" value={form.sender} onChange={(e) => setForm((f) => ({ ...f, sender: e.target.value, amount: (senders.find((s) => s.external_ref === e.target.value)?.typical_amount) || f.amount }))}>
-          {senders.map((s) => (
-            <option key={s.external_ref} value={s.external_ref}>
-              {s.registered_name} · {s.external_ref}
-            </option>
-          ))}
-        </select>
-
-        <div className="wallet-hero">
-          <div className="w-row">
-            <span className="w-ico"><i className="fa-solid fa-wallet" /></span>
-            <span className="w-meta">
-              <span className="w-label">Salio lako</span>
-              <span className="w-name">{sender?.registered_name}</span>
-            </span>
-            <span className="w-ccy">TZS</span>
-          </div>
-          <div className="w-balance">{nf(sender?.balance ?? 0)}</div>
-          <div className="w-sub">Pochi ya DCS · siku {sender?.account_age_days}</div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 12 }}>
-          <div className="action-tile" role="button" onClick={openHistory}>
-            <i className="fa-solid fa-clock-rotate-left" />
-            <span>Shughuli</span>
-            <small>historia halisi</small>
-          </div>
-          <div className="action-tile" role="button" onClick={next}>
-            <i className="fa-solid fa-paper-plane" />
-            <span>Tuma</span>
-            <small>mpya</small>
+      <div className="home-top">
+        <div className="home-greet">
+          <div className="home-avatar">{initials}</div>
+          <div>
+            <div className="muted" style={{ fontSize: 10.5 }}>Karibu,</div>
+            <div style={{ fontWeight: 800, fontSize: 15 }}>{firstName}</div>
           </div>
         </div>
-        <p className="muted" style={{ fontSize: 11.5, margin: "8px 2px 0", lineHeight: 1.5 }}>
-          {sender?.note}
-        </p>
-        <button className="phone-btn phone-btn-gold" style={{ marginTop: 14 }} onClick={next}>
-          <i className="fa-solid fa-paper-plane" /> Tuma pesa
+        <button className="home-avatar small" onClick={openHistory} title="Chagua mtumiaji">
+          <i className="fa-solid fa-right-left" />
         </button>
       </div>
+
+      <div className="wallet-hero">
+        <div className="w-row">
+          <span className="w-ico"><i className="fa-solid fa-wallet" /></span>
+          <span className="w-meta">
+            <span className="w-label">Salio lako</span>
+            <span className="w-name">{sender?.registered_name} · {sender?.external_ref}</span>
+          </span>
+          <span className="w-ccy">TZS</span>
+        </div>
+        <div className="w-balance">{nf(sender?.balance ?? 0)}</div>
+        <div className="w-sub">Kuhakikishiwa na DCS · siku {sender?.account_age_days} za akaunti</div>
+      </div>
+
+      <div className="quick-grid">
+        <button className="quick-tile" onClick={next}>
+          <span className="qt-ico qt-gold"><i className="fa-solid fa-paper-plane" /></span>
+          <b>Tuma</b>
+          <small>mpokeaji</small>
+        </button>
+        <button className="quick-tile" onClick={openHistory}>
+          <span className="qt-ico qt-blue"><i className="fa-solid fa-clock-rotate-left" /></span>
+          <b>Shughuli</b>
+          <small>historia halisi</small>
+        </button>
+        <button className="quick-tile">
+          <span className="qt-ico qt-green"><i className="fa-solid fa-down-left-and-up-right-to-center" /></span>
+          <b>Pokea</b>
+          <small>namba yako</small>
+        </button>
+        <button className="quick-tile">
+          <span className="qt-ico qt-purple"><i className="fa-solid fa-phone" /></span>
+          <b>Lipia</b>
+          <small>huduma</small>
+        </button>
+      </div>
+
+      {history?.length > 0 && (
+        <div className="mini-stmt">
+          <div className="ms-head">
+            <span><i className="fa-solid fa-clock-rotate-left" /> Shughuli za hivi karibuni</span>
+            <button onClick={openHistory}>Zote <i className="fa-solid fa-angle-right" /></button>
+          </div>
+          {history.slice(0, 3).map((h) => (
+            <div key={h.transaction_id} className="ms-row">
+              <span className="ms-ic">
+                <i className={"fa-solid " + (h.hold_status === "active" || h.hold_status === "frozen" ? "fa-vault" : h.decision === "block" ? "fa-ban" : h.hold_status === "released" ? "fa-check" : "fa-arrow-up")} />
+              </span>
+              <div className="ms-mid">
+                <b>{h.recipient_ref ? "Kwenda " + h.recipient_ref : "Kwenda " + h.recipient_external_ref.slice(0, 9)}</b>
+                <small className="muted">{new Date(h.created_at).toLocaleString("en-TZ", { dateStyle: "short", timeStyle: "short" })}</small>
+              </div>
+              <div className="ms-amt">
+                <b>{h.amount.toLocaleString("en-TZ")}</b>
+                <small>TZS · {h.decision.toUpperCase()}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="muted" style={{ fontSize: 11.5, margin: "10px 2px 0", lineHeight: 1.5 }}>
+        {sender?.note}
+      </p>
+
+      <select className="phone-select" style={{ marginTop: 12 }} value={form.sender} onChange={(e) => { setForm((f) => ({ ...f, sender: e.target.value, amount: (senders.find((s) => s.external_ref === e.target.value)?.typical_amount) || f.amount })); loadHistory(e.target.value); }}>
+        {senders.map((s) => (
+          <option key={s.external_ref} value={s.external_ref}>
+            {s.registered_name} · {s.external_ref}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
