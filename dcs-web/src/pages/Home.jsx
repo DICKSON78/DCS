@@ -13,21 +13,21 @@ const SCENARIOS = [
     title: "Stolen devices & SIM swap",
     body: "An attacker on the customer's phone drains the account in minutes. A change of device fingerprint on the account is flagged and the transfer is held.",
     cta: "Trigger a device-change hold",
-    to: "/simulator",
+    to: "/ops",
   },
   {
     icon: "fa-arrow-trend-up",
     title: "Rapid-drain attacks",
     body: "Many small transfers that slip under monitoring radar. High velocity — more than five transfers inside an hour — is scored up and held before the drain completes.",
     cta: "Run a velocity burst",
-    to: "/simulator",
+    to: "/ops",
   },
   {
     icon: "fa-people-arrows",
     title: "Mule accounts",
     body: "Brand-new accounts that receive money and forward it. Cold-start customers (day zero) and multi-recipient funneling patterns are flagged for review.",
     cta: "Score a cold-start transfer",
-    to: "/simulator",
+    to: "/ops",
   },
   {
     icon: "fa-clock-rotate-left",
@@ -93,8 +93,8 @@ export default function Home() {
               the transfers that predict money loss — before the money moves.
             </p>
             <div className="hero-actions">
-              <Link to="/simulator" className="btn">
-                <i className="fa-solid fa-bolt" /> Try the simulator
+              <Link to="/ops" className="btn">
+                <i className="fa-solid fa-bolt" /> Open admin panel
               </Link>
               <Link to="/verify" className="btn btn-ghost">
                 <i className="fa-solid fa-user-check" /> Verify a recipient
@@ -211,14 +211,14 @@ export default function Home() {
           <div className="grid grid-3">
             <div className="card reveal">
               <h3>
-                <i className="fa-solid fa-bolt" style={{ color: "var(--gold)" }} /> Simulator
+                <i className="fa-solid fa-bolt" style={{ color: "var(--gold)" }} /> Admin console
               </h3>
               <p>
                 Fire real transactions at the DCS rule engine. Watch the risk score climb as
                 devices change and velocity builds — and see exactly which fraud signals fired.
               </p>
-              <Link to="/simulator" className="btn btn-sm mt">
-                Open simulator
+              <Link to="/ops" className="btn btn-sm mt">
+                Open ops panel
               </Link>
             </div>
             <div className="card reveal">

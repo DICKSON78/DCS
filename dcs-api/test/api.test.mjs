@@ -336,6 +336,20 @@ test('ops rotation rotates API key and signing secret (old credentials rejected)
   }
 });
 
+test('client directory is available to a signed tenant (no ops token)', async () => {
+  const res = await app.inject({
+    method: 'GET',
+    url: '/v1/client/directory',
+    headers: signed('GET', '/v1/client/directory'),
+  });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.ok(Array.isArray(res.json().senders));
+  assert.ok(Array.isArray(res.json().recipients));
+
+  const noAuth = await app.inject({ method: 'GET', url: '/v1/client/directory' });
+  assert.equal(noAuth.statusCode, 401, 'unsigned request must be rejected');
+});
+
 test('ops directory CRUD: sandbox customers and scenarios', async () => {
   const ops = { authorization: `Bearer ${process.env.OPS_BEARER_TOKEN}` };
   const withJson = (h) => ({ ...h, 'content-type': 'application/json' });

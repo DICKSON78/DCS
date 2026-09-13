@@ -61,6 +61,46 @@ export function registerTransactionRoutes(fastify) {
   );
 
   fastify.get(
+    '/v1/transactions',
+    asyncHandler(async (request, reply) => {
+      const { user_external_ref, limit } = request.query;
+      if (!user_external_ref) {
+        throw new ApiError(400, 'invalid_payload', 'user_external_ref is required');
+      }
+      const take = Math.min(Math.max(Number(limit) || 25, 1), 100);
+      const txns = await prisma.transaction.findMany({
+        where: {
+          tenant_id: request.tenantId,
+          OR: [
+            { user_external_ref },
+            { sender_ref: user_external_ref },
+            { recipient_ref: user_external_ref },
+          ],
+        },
+        include: { hold: true },
+        orderBy: { created_at: 'desc' },
+        take,
+      });
+      reply.code(200).send({
+        transactions: txns.map((t) => ({
+          transaction_id: t.transaction_id,
+          ref: t.tenant_txn_ref,
+          amount: Number(t.amount),
+          currency: t.currency,
+          channel: t.channel,
+          decision: t.decision,
+          sender_ref: t.sender_ref,
+          recipient_ref: t.recipient_ref,
+          recipient_external_ref: t.recipient_external_ref,
+          occurred_at: t.occurred_at,
+          created_at: t.created_at,
+          hold_status: t.hold?.status ?? null,
+        })),
+      });
+    })
+  );
+
+  fastify.get(
     '/v1/transactions/:id',
     asyncHandler(async (request, reply) => {
       const { id } = request.params;

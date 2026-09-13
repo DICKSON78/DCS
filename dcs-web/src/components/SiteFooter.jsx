@@ -18,9 +18,8 @@ export default function SiteFooter() {
           <div className="footer-col">
             <h5>Product</h5>
             <Link to="/">Overview</Link>
-            <Link to="/simulator">Transaction simulator</Link>
-            <Link to="/verify">Recipient verification</Link>
             <Link to="/ops">Ops console</Link>
+            <Link to="/verify">Recipient verification</Link>
           </div>
 
           <div className="footer-col">

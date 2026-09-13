@@ -3,7 +3,6 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useCredentials } from "../lib/credentials.jsx";
 
 const NAV_ITEMS = [
-  { to: "/simulator", label: "Simulator" },
   { to: "/verify", label: "Verify" },
   { to: "/ops", label: "Ops" },
   { to: "/docs", label: "API docs" },
@@ -52,8 +51,8 @@ export default function SiteHeader({ menuOpen, setMenuOpen }) {
           <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>
             <i className="fa-solid fa-plug" /> Connection
           </button>
-          <Link to="/simulator" className="btn btn-sm">
-            Try it now
+          <Link to="/ops" className="btn btn-sm">
+            Admin panel
           </Link>
         </div>
 

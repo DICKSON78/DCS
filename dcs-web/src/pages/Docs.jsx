@@ -201,9 +201,10 @@ export default function Docs() {
             <li><b>Decision</b> — one of allow, warn, hold or block, with reason codes.</li>
           </ol>
           <Callout type="info">
-            This documentation covers the REST API directly. There is a live{" "}
-            <Link to="/simulator" className="inline">transaction simulator</Link> and a{" "}
-            <Link to="/ops" className="inline">ops console</Link> that drive the same endpoints.
+            This documentation covers the REST API directly. The{" "}
+            <Link to="/ops" className="inline">ops console</Link> drives the same endpoints, and a
+            real mobile wallet app (`dcs-mobile`, Expo/React Native) exercises the tenant-signed
+            client endpoints from a phone.
           </Callout>
         </section>
 
@@ -665,11 +666,12 @@ export default function Docs() {
           />
 
           <h3 style={{ marginTop: 26 }}>
-            <span className="hash">#</span>App-style demo (Simulator page)
+            <span className="hash">#</span>Mobile wallet app (client demo)
           </h3>
           <p>
-            The <Link to="/simulator" className="inline">Simulator</Link> page renders a phone-app
-            “Send Money” flow, backed by a DB customer directory:
+            The customer app lives in <code>dcs-mobile</code> (Expo/React Native): an index page
+            with live balance and history, a “Send Money” flow with PIN pad, and a receipt page —
+            all signed as the <b>tenant</b>, never with the ops bearer token:
           </p>
           <div className="doc-table-wrap">
             <table className="doc-table">
@@ -677,21 +679,19 @@ export default function Docs() {
                 <tr><th>Endpoint</th><th>Auth</th><th>Use</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>GET /v1/sandbox/customers</code></td><td>ops bearer</td><td>List sandbox senders + recipients (masked names, account age, devices, notes).</td></tr>
-                <tr><td><code>GET /v1/sandbox/scenarios</code></td><td>ops bearer</td><td>List demo scenarios (Hadithi A/B/C) built from the customer directory.</td></tr>
+                <tr><td><code>GET /v1/client/directory</code></td><td>tenant-signed</td><td>Accounts + contacts for the phone app (no ops token).</td></tr>
+                <tr><td><code>GET /v1/transactions</code></td><td>tenant-signed</td><td>Customer history (filter by your <code>user_external_ref</code>), incl. hold status.</td></tr>
                 <tr><td><code>POST /v1/recipients/verify</code></td><td>tenant-signed</td><td>“Hakikisha” — confirm the registered owner’s name before money leaves.</td></tr>
                 <tr><td><code>POST /v1/transactions/validate</code></td><td>tenant-signed</td><td>Score the transfer → <code>allow · warn · hold · block</code>.</td></tr>
-                <tr><td><code>POST /v1/holds/:id/freeze</code></td><td>ops bearer</td><td>Escalate a hold to a freeze once fraud is reported.</td></tr>
-                <tr><td><code>POST /v1/disputes</code></td><td>tenant-signed</td><td>Customer complaint (wrong recipient / fraud).</td></tr>
-                <tr><td><code>PATCH /v1/disputes/:id</code></td><td>ops bearer</td><td>Resolve investigation → <code>approved</code> (refund to owner).</td></tr>
+                <tr><td><code>POST /v1/transactions/:id/settle</code></td><td>tenant-signed</td><td>Settle the money into the recipient’s wallet (held amounts await release).</td></tr>
               </tbody>
             </table>
           </div>
-          <p>Three realistic journeys are wired up as one-tap scenarios:</p>
+          <p>The app maps decisions to customer language:</p>
           <ul>
-            <li><b>allow</b> — trusted sender → known recipient, usual device/amount. Money settles with an SMS receipt.</li>
-            <li><b>hold → refund</b> — sender uses an unknown device to a 2-day-old new recipient. Money is secured, the customer reports fraud, Ops freezes → investigates → refunds to the owner.</li>
-            <li><b>block</b> — day-zero account sending a far-above-baseline amount from an unknown device. Money never leaves the wallet.</li>
+            <li><b>allow / warn</b> — <i>Imekamilika</i> (completed); the receipt SMS has no risk score.</li>
+            <li><b>hold</b> — <i>Inakaguliwa</i> (under review); money is secured until released.</li>
+            <li><b>block</b> — <i>Imekataliwa</i> (rejected); money never left the wallet.</li>
           </ul>
         </section>
 
