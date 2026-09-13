@@ -91,7 +91,7 @@ function opRequest(creds, method, path, payload) {
 
 function useOpsData(creds, path) {
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const load = async () => {
     setLoading(true); setError(null);
@@ -244,7 +244,7 @@ function Transactions({ creds, q }) {
         </div>
       </div>
       <State loading={loading} error={error} />
-      {!loading && !error && <TxTable rows={data.transactions} q={q} />}
+      {data && !loading && !error && <TxTable rows={data.transactions} q={q} />}
     </div>
   );
 }
